@@ -61,7 +61,7 @@ python3 "$source_dir/image/sbom.py" "$check" "$out" "$bundle_sha"
 
 # FAT32 has enough reserve for several overlay generations. Size is adaptive.
 used_kib=$(du -sk "$media" | cut -f1)
-size_mib=$(( ((used_kib / 1024 * 3 + 1023) / 256) * 256 ))
+size_mib=$(( ((used_kib * 3 / 1024 + 1023) / 256) * 256 ))
 [ "$size_mib" -ge 4096 ] || size_mib=4096
 [ "$size_mib" -le 12000 ] || { echo 'Image exceeds the supported build budget'; exit 1; }
 fat="$build_dir/boot.fat"

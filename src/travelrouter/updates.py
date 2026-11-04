@@ -196,8 +196,8 @@ class Updates:
                     if not repository:
                         raise ValueError('Unexpected package source')
                     name = url.rsplit('/', 1)[-1]
-                    os.link(cache / name, repositories / repository / 'aarch64' / name)
-                downloaded = [str(path) for path in cache.glob('*.apk')]
+                    os.replace(cache / name, repositories / repository / 'aarch64' / name)
+                downloaded = [str(path) for path in repositories.glob('*/aarch64/*.apk')]
                 if not downloaded:
                     raise ValueError('No packages were downloaded')
                 command(['/sbin/apk', 'verify', *downloaded], timeout=120)

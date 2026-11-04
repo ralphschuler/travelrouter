@@ -66,6 +66,11 @@
         <p><a href="/api/export" download="travelrouter-redacted.json">Export settings without passwords</a></p>
       </details>
       <button id="logout" class="secondary" type="button">Sign out</button>
+      <details class="card"><summary>Software and system updates</summary><p id="update-status">No update operation is running.</p><form id="auto-update-form"><label class="checkbox"><input name="automatic" type="checkbox">Automatically stage Alpine stable-branch security and bug-fix updates daily.</label><p class="hint">Updates activate at the next reboot. The router never reboots automatically. Kernel and boot firmware updates use a complete release image.</p><button>Save update preference</button></form>
+        <button id="check-updates" class="secondary" type="button">Check releases</button><button id="package-updates" class="secondary" type="button">Stage Alpine package updates</button><p><a href="https://github.com/ralphschuler/travelrouter/releases" target="_blank" rel="noopener noreferrer">Download an official release or full system image</a></p>
+        <form id="app-update-form"><label>Signed TravelRouter update file<input name="file" type="file" accept=".tru,application/json" required></label><p class="hint">Only files signed by this project's release key are accepted. Configuration remains on this device.</p><button>Verify and stage application update</button></form>
+        <button id="reboot" type="button" class="secondary">Reboot router now</button>
+      </details>
       <details class="card"><summary>Logs</summary><p>Local service logs only. DNS query history is not collected.</p><button id="refresh-logs" type="button" class="secondary">Refresh logs</button><pre id="logs" tabindex="0"></pre></details>
       <details class="card"><summary>Export and restore settings</summary><p>Encrypted backups contain saved network and tunnel secrets. Use a unique backup password and keep the file private. Restoring replaces this router's saved settings and invalidates your session.</p>
         <form id="backup-form"><label>Backup encryption password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label><button>Download encrypted backup</button></form>

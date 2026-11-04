@@ -42,7 +42,8 @@ def domains_from_text(text):
         if not parts:
             continue
         candidate = parts[0]
-        if len(parts) == 2 and parts[0] in {'0.0.0.0', '127.0.0.1', '::'}:  # nosec B104 - hosts-file parser, not a listener
+        # Parse hosts-file sinkhole addresses; this never opens a network socket.
+        if len(parts) == 2 and parts[0] in {'0.0.0.0', '127.0.0.1', '::'}:  # nosec B104
             candidate = parts[1]
         elif len(parts) != 1:
             continue

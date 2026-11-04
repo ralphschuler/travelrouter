@@ -207,7 +207,7 @@ class System:
 
     def restore(self, envelope, password):
         payload = validate_payload(unseal(envelope, password))
-        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False))
+        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
         self.privacy.stop()
         old_config = self.store.load()
         paths = list(self.network.profiles.glob('travelrouter-*.nmconnection'))
@@ -250,7 +250,7 @@ class System:
     def configure_privacy(self, data):
         # Drop forwarding before touching route tables or tunnel processes.
         command(['/sbin/nft', '-f', '-'],
-                input_text=render_firewall(self.ap, self.wan, 'offline', False))
+                input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
         self.last_policy = None
         self.privacy.stop()
         mode = self.privacy.prepare(data, self.wan)
