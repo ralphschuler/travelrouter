@@ -2,6 +2,7 @@
 let csrf = '';
 let lastMetrics = null;
 let filteringLoaded = false;
+let updatesLoaded = false;
 const byId = id => document.getElementById(id);
 const show = (id, visible) => { byId(id).hidden = !visible; };
 const message = text => { byId('message').textContent = text; show('message', true); };
@@ -30,6 +31,7 @@ function signedIn(result) {
   show('setup', result.setup_required);
   show('panel', !result.setup_required);
   filteringLoaded = false;
+  updatesLoaded = false;
 }
 
 byId('login-form').addEventListener('submit', event => {
@@ -176,6 +178,32 @@ byId('import-form').addEventListener('submit', event => {
   });
 });
 
+for (const [id, operation] of [['check-updates', 'check'], ['package-updates', 'packages']]) {
+  byId(id).addEventListener('click', event => busy(event.target, async () => {
+    await api('updates', {operation}); message('Update operation started. Progress appears below.');
+  }));
+}
+byId('auto-update-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    await api('updates/settings', {automatic: event.target.elements.automatic.checked});
+    message('Automatic update preference saved.');
+  });
+});
+byId('app-update-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const file = event.target.elements.file.files[0];
+    if (!file || file.size > 2900000) throw new Error('Update file must be smaller than 2.9 MB.');
+    await api('updates/install', {update: JSON.parse(await file.text())});
+    event.target.reset(); message('Verifying the signed update. Check its status below before rebooting.');
+  });
+});
+byId('reboot').addEventListener('click', event => busy(event.target, async () => {
+  if (!window.confirm('Reboot this router now? Connected devices will briefly lose access.')) return;
+  await api('reboot', {confirm: true}); message('Router is rebooting. Reconnect in a moment.');
+}));
+
 const formatBytes = value => value > 1048576 ? (value / 1048576).toFixed(1) + ' MiB' : (value / 1024).toFixed(1) + ' KiB';
 async function metrics() {
   if (!csrf || byId('panel').hidden) return;
@@ -222,6 +250,13 @@ async function status() {
     byId('details').append(key, text);
   }
   byId('hardware').textContent = info.hardware_note || info.last_error || '';
+  if (info.updates) {
+    byId('update-status').textContent = info.updates.message + (info.updates.busy ? ' · Working…' : '') + (info.updates.reboot_required ? ' · Reboot required.' : '');
+    if (!updatesLoaded) {
+      byId('auto-update-form').elements.automatic.checked = info.updates.automatic;
+      updatesLoaded = true;
+    }
+  }
   if (info.filtering) {
     const filtering = info.filtering;
     if (!filteringLoaded) {

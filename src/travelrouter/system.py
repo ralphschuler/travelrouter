@@ -246,6 +246,7 @@ class System:
             raise
         self.last_policy = None
         self.filter_revision += 1
+        self.filtering.last_update = 0
 
     def configure_privacy(self, data):
         # Drop forwarding before touching route tables or tunnel processes.
@@ -365,7 +366,7 @@ class System:
                         command(['/sbin/rc-service', 'hostapd', 'restart'])
                         self.pending_restart = 0
                     self.last_error = None
-                if state == 'online' and time.monotonic() - self.filtering.last_update > 86400:
+                if state == 'online' and (self.filtering.last_update == 0 or time.monotonic() - self.filtering.last_update > 86400):
                     try:
                         # Downloading lists may take time; leave the panel responsive.
                         self.filtering.refresh()
@@ -376,7 +377,7 @@ class System:
                         self.filtering.error = 'List refresh failed; previous valid lists remain in use.'
                         self.filtering.last_update = time.monotonic() - 82800
                 if (self.state == 'online' and self.store.load().get('auto_updates', False)
-                        and not self.updates.status['busy'] and time.monotonic() - self.updates.last_check > 86400):
+                        and not self.updates.status['busy'] and (self.updates.last_check == 0 or time.monotonic() - self.updates.last_check > 86400)):
                     self.updates.start('packages')
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                 LOG.exception('Router state update failed')

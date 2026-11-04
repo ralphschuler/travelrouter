@@ -25,18 +25,16 @@ class TransitionTests(unittest.TestCase):
                 class Tunnel:
                     mode = 'wireguard'
 
-                    def stop(tunnel):
-                        self.assertIn('meta skuid "unbound" oifname != "trvpn0"', policies[-1])
+                    def stop(tunnel, emitted=policies):
+                        self.assertIn('meta skuid "unbound" oifname != "trvpn0"', emitted[-1])
                         raise RuntimeError('stop after the transition-policy assertion')
 
                 router.privacy = Tunnel()
-                with patch('travelrouter.system.command', side_effect=lambda _args, **kwargs: policies.append(kwargs['input_text'])):
+                with patch('travelrouter.system.command', side_effect=lambda _args, emitted=policies, **kwargs: emitted.append(kwargs['input_text'])):
                     with self.assertRaises(RuntimeError):
                         if action == 'configure':
                             router.configure_privacy({'mode': 'direct'})
                         else:
-                            envelope = seal({'version': 1, 'config': config, 'networks': [],
-                                             'wireguard': None}, 'a unique backup password')
                             # A direct-mode backup can replace a protected router.
                             config['privacy_mode'] = 'direct'
                             envelope = seal({'version': 1, 'config': config}, 'a unique backup password')

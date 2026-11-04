@@ -130,7 +130,7 @@ class Updates:
 
     def install_application(self, envelope):
         key = serialization.load_pem_public_key(Path('/etc/travelrouter/update-public.pem').read_bytes())
-        manifest, files = verify_update(envelope, key, __version__)
+        manifest, files = verify_update(envelope, key, self.status.get('staged_version', __version__))
         with self.backend.lock:
             staging = Path(tempfile.mkdtemp(prefix='.travelrouter-update-', dir='/opt'))
             try:
@@ -154,7 +154,7 @@ class Updates:
                 if staging.exists():
                     shutil.rmtree(staging)
         self.status.update(message='Application ' + manifest['version'] + ' staged. Reboot when convenient.',
-                           reboot_required=True)
+                           reboot_required=True, staged_version=manifest['version'])
 
     def stage_packages(self):
         # The live RAM root stays unchanged. Signed packages activate on reboot.

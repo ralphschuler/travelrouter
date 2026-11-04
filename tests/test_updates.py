@@ -1,11 +1,30 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from travelrouter.updates import package_update, verify_update
+from travelrouter.updates import Updates, package_update, verify_update
 
 
 class UpdateTests(unittest.TestCase):
+    def test_staged_version_cannot_be_downgraded_before_reboot(self):
+        class ForbiddenLock:
+            def __enter__(self):
+                raise AssertionError('Update must be rejected before filesystem mutation')
+
+            def __exit__(self, *args):
+                return False
+
+        updates = Updates(SimpleNamespace(lock=ForbiddenLock()))
+        updates.status['staged_version'] = '0.3.0'
+        update = package_update({'travelrouter/__init__.py': b'valid',
+                                 'travelrouter/__main__.py': b'valid'}, '0.2.0', self.key)
+        public = self.key.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+        with patch('travelrouter.updates.Path.read_bytes', return_value=public), self.assertRaises(ValueError):
+            updates.install_application(update)
+
     def setUp(self):
         self.key = Ed25519PrivateKey.generate()
 

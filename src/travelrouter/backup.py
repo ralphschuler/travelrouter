@@ -52,6 +52,8 @@ def validate_payload(payload):
                'dns_mode', 'privacy_mode', 'filtering', 'auto_updates'}
     if not isinstance(config, dict) or set(config) - allowed or config.get('setup_complete') is not True:
         raise ValueError('Backup must contain a completed setup')
+    if type(config.get('schema')) is not int or config['schema'] != 1:
+        raise ValueError('Unsupported configuration schema')
     try:
         validate_setup('backup validation placeholder', config['ap_password'], config['ssid'], config['country'])
         if not re.fullmatch(r'scrypt\$[0-9a-f]{32}\$[0-9a-f]{128}', config['admin_hash']):

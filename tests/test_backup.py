@@ -1,9 +1,27 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 from travelrouter.backup import seal, unseal, validate_payload
+from travelrouter.config import ConfigStore
+from travelrouter.security import hash_password
 
 
 class BackupTests(unittest.TestCase):
+    def test_unsupported_or_missing_config_schema_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = ConfigStore(Path(directory) / 'config.json').load()
+            config.update(setup_complete=True, admin_hash=hash_password('a new administrator password'),
+                          ap_password='a new private wifi password', country='DE')
+            for schema in (None, 2, True):
+                candidate = dict(config)
+                if schema is None:
+                    candidate.pop('schema')
+                else:
+                    candidate['schema'] = schema
+                with self.subTest(schema=schema), self.assertRaises(ValueError):
+                    validate_payload({'version': 1, 'config': candidate})
+
     def test_encrypted_backup_roundtrip_and_wrong_password(self):
         original = {'version': 1, 'private': 'not-in-the-export'}
         sealed = seal(original, 'a unique backup password')
