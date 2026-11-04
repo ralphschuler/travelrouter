@@ -79,14 +79,23 @@ def first_policy():
     wait_restart('dnsmasq', after_start=original[1])
 
 
+def assert_ap_ssid(config, expected):
+    encoded = [line.partition('=')[2] for line in config.splitlines() if line.startswith('ssid2=')]
+    require(len(encoded) == 1, 'Expected one hex-encoded SSID in the real hostapd configuration')
+    try:
+        actual = bytes.fromhex(encoded[0])
+    except ValueError as error:
+        raise AssertionError('The real hostapd SSID is not valid hexadecimal') from error
+    require(actual == expected.encode(), 'Setup did not apply the new SSID to the real access point')
+
+
 def main():
     if sys.argv[1] == 'capture':
         (DIRECTORY / 'controller.json').write_text(json.dumps(controller_identity()))
     elif sys.argv[1] == 'after-setup':
         previous = json.loads((DIRECTORY / 'before-setup.json').read_text())
         wait_restart('hostapd', previous=previous)
-        require('ssid=TravelRouter-CI\n' in Path('/etc/hostapd/hostapd.conf').read_text(),
-                'Setup did not apply the new SSID to the real access point')
+        assert_ap_ssid(Path('/etc/hostapd/hostapd.conf').read_text(), 'TravelRouter-CI')
     else:
         raise ValueError('Unknown lifecycle test phase')
 
