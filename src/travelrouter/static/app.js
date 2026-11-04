@@ -3,6 +3,7 @@ let csrf = '';
 let lastMetrics = null;
 let filteringLoaded = false;
 let updatesLoaded = false;
+let developerLoaded = false;
 const byId = id => document.getElementById(id);
 const show = (id, visible) => { byId(id).hidden = !visible; };
 const message = (text, error = false) => {
@@ -68,6 +69,7 @@ function signedIn(result) {
   selectView();
   filteringLoaded = false;
   updatesLoaded = false;
+  developerLoaded = false;
 }
 
 byId('login-form').addEventListener('submit', event => {
@@ -230,6 +232,17 @@ byId('auto-update-form').addEventListener('submit', event => {
     message('Automatic update preference saved.');
   });
 });
+byId('developer-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const form = event.target;
+    await api('developer', {enabled: form.elements.enabled.checked, public_key: form.elements.public_key.value});
+    form.elements.public_key.value = '';
+    developerLoaded = false;
+    message('Developer access settings saved.');
+    await status();
+  });
+});
 byId('app-update-form').addEventListener('submit', event => {
   event.preventDefault();
   busy(event.submitter, async () => {
@@ -303,6 +316,15 @@ async function status() {
     if (!updatesLoaded) {
       byId('auto-update-form').elements.automatic.checked = info.updates.automatic;
       updatesLoaded = true;
+    }
+  }
+  if (typeof info.developer_enabled === 'boolean') {
+    byId('developer-status').textContent = info.developer_enabled
+      ? 'SSH is enabled for hotspot clients. Host key fingerprint: ' + (info.developer_host_fingerprint || 'unavailable')
+      : 'SSH is off.';
+    if (!developerLoaded) {
+      byId('developer-form').elements.enabled.checked = info.developer_enabled;
+      developerLoaded = true;
     }
   }
   if (info.filtering) {

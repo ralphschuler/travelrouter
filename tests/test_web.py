@@ -15,12 +15,16 @@ class LocalBackend:
         self.store = store
         self.lock = threading.RLock()
         self.connected = False
+        self.developer_settings = None
 
     def status(self):
         return {'state': 'offline', 'setup_complete': self.store.load()['setup_complete']}
 
     def save_config(self, data):
         self.store.save(data)
+
+    def save_developer(self, data):
+        self.developer_settings = data
 
     def connect(self, **kwargs):
         self.connected = True
@@ -86,6 +90,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('/api/setup', {'admin_password': 'my new admin password',
                          'ap_password': 'my new wifi password', 'ssid': 'My Router', 'country': 'DE'},
                          {'X-CSRF-Token': 'wrong'})[0], 403)
+
+    def test_developer_changes_require_login_setup_and_csrf(self):
+        data = {'enabled': True, 'public_key': 'example'}
+        self.assertEqual(self.request('/api/developer', data)[0], 401)
+        self.login()
+        self.assertEqual(self.request('/api/developer', data)[0], 409)
+        config = self.store.load()
+        config['setup_complete'] = True
+        self.store.save(config)
+        self.assertEqual(self.request('/api/developer', data, {'X-CSRF-Token': 'wrong'})[0], 403)
+        self.assertIsNone(self.backend.developer_settings)
+        self.assertEqual(self.request('/api/developer', data)[0], 200)
+        self.assertEqual(self.backend.developer_settings, data)
 
     def test_setup_rotates_credentials_and_invalidates_session(self):
         self.login()

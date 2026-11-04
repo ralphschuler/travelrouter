@@ -1,6 +1,6 @@
 [project]
 name = "travelrouter"
-version = "0.2.0"
+version = "0.3.0"
 description = "Offline-first Alpine travel router for CM5 and AMD64/ARM64 UEFI systems"
 requires-python = ">=3.12"
 dependencies = ["cryptography>=46.0.0"]

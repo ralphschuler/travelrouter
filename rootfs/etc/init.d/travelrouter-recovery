@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+# shellcheck disable=SC2034
+description="Confirm or roll back a trial update independently of router services"
+
+depend() {
+    after devfs
+    before travelrouter-bootstrap
+}
+
+start() {
+    ebegin "Starting update recovery guard when needed"
+    for state in /media/*/.travelrouter-update; do
+        [ -f "$state" ] || continue
+        /sbin/start-stop-daemon --start --background \
+            --stdout /var/log/travelrouter-recovery.log --stderr /var/log/travelrouter-recovery.log \
+            --exec /bin/sh -- /etc/travelrouter/recovery.sh guard
+        eend $?
+        return $?
+    done
+    eend 0
+}

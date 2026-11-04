@@ -1,5 +1,7 @@
+import base64
 import errno
 import io
+import json
 import shutil
 import tempfile
 import threading
@@ -9,13 +11,60 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from travelrouter.updates import MIRROR, Updates, package_architecture, package_update, repository_location, verify_update
+from travelrouter.updates import (
+    MIRROR,
+    Updates,
+    package_architecture,
+    package_update,
+    replace_application,
+    repository_location,
+    verify_update,
+)
 
 
 class UpdateTests(unittest.TestCase):
+    def test_interrupted_application_swap_restores_original_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target, staging, previous = (root / name for name in ('current', 'staging', 'previous'))
+            target.mkdir()
+            staging.mkdir()
+            (target / 'version').write_text('old')
+            (staging / 'version').write_text('new')
+            original_replace = __import__('os').replace
+
+            def interrupted(source, destination):
+                if Path(source) == staging:
+                    raise OSError('simulated interrupted swap')
+                return original_replace(source, destination)
+
+            with patch('travelrouter.updates.os.replace', side_effect=interrupted):
+                with self.assertRaises(OSError):
+                    replace_application(staging, target, previous, lambda: None)
+            self.assertEqual((target / 'version').read_text(), 'old')
+            self.assertFalse(previous.exists())
+
+    def test_persistence_failure_restores_original_application(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target, staging, previous = (root / name for name in ('current', 'staging', 'previous'))
+            target.mkdir()
+            staging.mkdir()
+            (target / 'version').write_text('old')
+            (staging / 'version').write_text('new')
+
+            def fail():
+                raise OSError('simulated persistence failure')
+
+            with self.assertRaises(OSError):
+                replace_application(staging, target, previous, fail)
+            self.assertEqual((target / 'version').read_text(), 'old')
+            self.assertFalse(previous.exists())
+
     def test_package_updates_use_native_apk_architecture(self):
         for architecture in ('x86_64', 'aarch64'):
             with self.subTest(architecture=architecture), patch('travelrouter.updates.command', return_value=architecture + '\n'):
@@ -68,6 +117,18 @@ class UpdateTests(unittest.TestCase):
         update['manifest']['version'] = '1.0.0'
         with self.assertRaises(ValueError):
             verify_update(update, self.key.public_key(), '0.1.0')
+
+    def test_new_update_cannot_be_relabelled_for_old_images_without_recovery(self):
+        update = package_update({'travelrouter/__init__.py': b'valid',
+                                 'travelrouter/__main__.py': b'valid'}, '0.2.1', self.key)
+        self.assertEqual(update['format'], 'travelrouter-update-v2')
+        legacy_bytes = b'TravelRouter application update v1\x00' + json.dumps(
+            update['manifest'], sort_keys=True, separators=(',', ':')).encode()
+        with self.assertRaises(InvalidSignature):
+            self.key.public_key().verify(base64.b64decode(update['signature']), legacy_bytes)
+        update['format'] = 'travelrouter-update-v1'
+        with self.assertRaises(ValueError):
+            verify_update(update, self.key.public_key(), '0.2.0')
 
     def test_even_signed_archive_cannot_escape_software_directory(self):
         update = package_update({'../../etc/passwd': b'evil'}, '0.2.0', self.key)
@@ -128,9 +189,10 @@ class PackageStagingTests(unittest.TestCase):
                 if persist_fails:
                     raise RuntimeError('injected persistence failure after remount')
 
-            updates = Updates(SimpleNamespace(lock=threading.RLock(), persist=persist))
+            updates = Updates(SimpleNamespace(lock=threading.RLock(), persist_for_update=persist))
             with ExitStack() as stack:
                 stack.enter_context(patch('travelrouter.system.boot_medium', return_value=medium))
+                stack.enter_context(patch('travelrouter.updates.ensure_ready'))
                 stack.enter_context(patch('travelrouter.updates.command', side_effect=invoke))
                 stack.enter_context(patch('travelrouter.updates.Path', side_effect=lambda value:
                                          world if str(value) == '/etc/apk/world' else Path(value)))

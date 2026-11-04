@@ -15,7 +15,7 @@ The initial SSID is `TravelRouter-XXXX`, with Wi-Fi passphrase
 `ChangeMe-TravelRouter!`. All public images share these documented credentials.
 The first portal requires replacing both passwords before upstream forwarding
 or other configuration changes. Initial setup should take place in a trusted
-location. There is no root password login, and SSH is disabled.
+location. There is no root password login, and SSH is disabled by default.
 
 The admin password is stored as a salted scrypt hash; upstream Wi-Fi secrets
 are root-only NetworkManager keyfiles. The boot medium/overlay is not encrypted.

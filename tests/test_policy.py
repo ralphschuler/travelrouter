@@ -31,6 +31,18 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 render_firewall(ap, wan, 'online', True)
 
+    def test_developer_ssh_only_opens_on_the_hotspot_after_setup(self):
+        disabled = render_firewall('wlan0', 'wlan1', 'online', True)
+        setup = render_firewall('wlan0', 'wlan1', 'online', False, developer=True)
+        enabled = render_firewall('wlan0', 'wlan1', 'online', True, developer=True)
+        rule = 'iifname "wlan0" ip saddr 10.42.0.0/24 tcp dport 22 accept'
+        self.assertNotIn('tcp dport 22 accept', disabled)
+        self.assertNotIn('tcp dport 22 accept', setup)
+        self.assertIn(rule, enabled)
+        self.assertNotIn('iifname "wlan1" tcp dport 22 accept', enabled)
+        self.assertLess(disabled.index('tcp dport 22 drop'), disabled.index('ct state established,related accept'))
+        self.assertLess(enabled.index(rule), enabled.index('tcp dport 22 drop'))
+
     def test_dns_modes_have_no_plaintext_online_fallback(self):
         offline = render_dns('wlan0', 'offline', [])
         self.assertIn('address=/#/10.42.0.1', offline)

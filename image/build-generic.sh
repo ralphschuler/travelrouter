@@ -31,8 +31,8 @@ printf '%s  %s\n' "$base_sha" "$iso" | sha256sum -c -
 xorriso -indev "$iso" -report_el_torito plain > "$build_dir/upstream-boot.txt" 2>&1
 xorriso -osirrox on -indev "$iso" -extract / "$build_dir/upstream"
 
-# Keep the official kernel, initramfs and signed module loop. ISO boot code is
-# replayed for the installer; the writable runtime gets its own UEFI loader.
+# Keep the official kernel and signed module loop. The runtime initramfs gains
+# an early recovery hook; the installer retains its original Alpine boot files.
 cp -a "$build_dir/upstream/boot" "$build_dir/media/boot"
 cp "$build_dir/upstream/.alpine-release" "$build_dir/media/.alpine-release"
 rm -rf "$build_dir/media/boot/syslinux"
@@ -40,6 +40,8 @@ rm -f "$build_dir/media/boot/grub/efi.img"
 for file in vmlinuz-lts initramfs-lts modloop-lts; do
     test -s "$build_dir/media/boot/$file"
 done
+python3 "$source_dir/image/initramfs_recovery.py" "$build_dir/media/boot/initramfs-lts" \
+    "$source_dir/rootfs/etc/travelrouter/recovery.sh"
 set --
 while IFS= read -r package; do
     case "$package" in ''|'#'*) continue ;; esac
@@ -65,7 +67,7 @@ while IFS= read -r url; do
     ln "$build_dir/downloads/$name" "$build_dir/media/repositories/$repository/$arch/$name"
 done < "$build_dir/package-urls.txt"
 python3 "$source_dir/image/overlay.py" "$source_dir" "$build_dir"
-touch "$build_dir/media/.travelrouter"
+touch "$build_dir/media/.travelrouter" "$build_dir/media/.travelrouter-recovery-v1"
 
 # No installer, unlocked account or test fixture enters this runtime overlay.
 check="$build_dir/check"

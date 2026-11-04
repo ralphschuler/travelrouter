@@ -338,6 +338,15 @@ def run(args, report):
             if phase == 'initial':
                 result = console.command(f'python3 {REMOTE}/lifecycle.py after-setup', timeout=60)
                 (output / 'ap-restart-results.txt').write_text(result)
+            elif args.recovery:
+                console.upload(HERE / 'ssh_router.py')
+                report['stage'] = 'developer SSH and untrusted ingress'
+                result = console.command(f'python3 {REMOTE}/ssh_router.py', timeout=120)
+                (output / 'developer-ssh-results.txt').write_text(result)
+                console.upload(HERE / 'update_e2e.py')
+                report['stage'] = 'signed update staging'
+                result = console.command(f'python3 {REMOTE}/update_e2e.py stage-good', timeout=180)
+                (output / 'update-staging.txt').write_text(result)
             report.setdefault('passed', []).append(phase)
             console.command('sync', timeout=30)
             # QEMU termination is a cold restart. The application must have fsynced
@@ -345,7 +354,73 @@ def run(args, report):
         finally:
             console.diagnostics(output, failed=phase not in report.get('passed', []))
             console.close()
+    if args.recovery:
+        recovery_scenarios(command, args, report)
     report.update(result='passed', stage='complete')
+
+
+def recovery_scenarios(command, args, report):
+    """Exercise a healthy trial and an intentionally broken signed application."""
+    report['stage'] = 'healthy update trial'
+    output = args.output / 'update-healthy'
+    output.mkdir(exist_ok=True)
+    console = Console(command, output / 'console.log')
+    try:
+        console.boot()
+        for name in ('prepare.sh', 'client.py', 'lifecycle.py', 'wifi.py', 'update_e2e.py'):
+            console.upload(HERE / name)
+        console.command(f'sh {REMOTE}/prepare.sh restored', timeout=240)
+        result = console.command(f'python3 {REMOTE}/update_e2e.py verify-good', timeout=120)
+        match = re.search(r'CI_CONFIRMED_VERSION:([0-9]+\.[0-9]+\.[0-9]+)', result)
+        require(match is not None, 'Confirmed update version not reported')
+        good_version = match.group(1)
+        console.command(f'python3 {REMOTE}/update_e2e.py stage-broken', timeout=180)
+        console.command('sync', timeout=30)
+        report.setdefault('passed', []).append('update-healthy')
+    finally:
+        console.close()
+
+    report['stage'] = 'failed trial watchdog reboot'
+    output = args.output / 'update-broken'
+    output.mkdir(exist_ok=True)
+    console = Console(command, output / 'console.log')
+    try:
+        console.boot()
+        for name in ('prepare.sh', 'client.py', 'lifecycle.py', 'wifi.py'):
+            console.upload(HERE / name)
+        try:
+            console.command(f'sh {REMOTE}/prepare.sh restored', timeout=240, check=False)
+        except (RuntimeError, TimeoutError):
+            if console.process.poll() is None:
+                raise
+        if console.process.poll() is None:
+            try:
+                # Drain serial output while waiting; a full pipe must not stall QEMU.
+                console.expect(rb'CI_UNEXPECTED_NEVER_EMITTED', 300)
+            except RuntimeError:
+                if console.process.poll() is None:
+                    raise
+            except TimeoutError as error:
+                raise RuntimeError('Failed trial did not reboot automatically') from error
+        require(console.process.returncode == 0, 'QEMU failed instead of reporting a guest reset')
+        report.setdefault('passed', []).append('update-broken-reboot')
+    finally:
+        console.close()
+
+    report['stage'] = 'previous installation recovery'
+    output = args.output / 'update-rollback'
+    output.mkdir(exist_ok=True)
+    console = Console(command, output / 'console.log')
+    try:
+        console.boot()
+        for name in ('prepare.sh', 'client.py', 'lifecycle.py', 'wifi.py', 'update_e2e.py'):
+            console.upload(HERE / name)
+        console.command(f'sh {REMOTE}/prepare.sh restored', timeout=240)
+        console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py restored', timeout=180)
+        console.command(f'python3 {REMOTE}/update_e2e.py verify-rollback {good_version}', timeout=60)
+        report.setdefault('passed', []).append('update-rollback')
+    finally:
+        console.close()
 
 
 def main():
@@ -353,6 +428,7 @@ def main():
     parser.add_argument('--image', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--scratch', type=Path, required=True)
+    parser.add_argument('--recovery', action='store_true', help='exercise signed trials and an automatic rollback')
     args = parser.parse_args()
     args.image, args.output, args.scratch = (path.resolve() for path in (args.image, args.output, args.scratch))
     args.output.mkdir(parents=True, exist_ok=True)

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .backup import seal, unseal, validate_payload
 from .config import atomic_write
+from .developer import configure_files, host_fingerprint, validate_public_key
 from .filtering import Filtering, validate_settings
 from .network import Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
@@ -68,11 +69,12 @@ def boot_medium():
 def persist_overlay():
     medium = boot_medium()
     command(['/bin/mount', '-o', 'remount,rw', str(medium)])
-    fd, name = tempfile.mkstemp(prefix='.travelrouter-', suffix='.tmp', dir=medium)
-    os.close(fd)
-    temporary = Path(name)
+    temporary = None
     target = medium / 'travelrouter.apkovl.tar.gz'
     try:
+        fd, name = tempfile.mkstemp(prefix='.travelrouter-', suffix='.tmp', dir=medium)
+        os.close(fd)
+        temporary = Path(name)
         with tarfile.open(temporary, 'w:gz') as archive:
             archive.add('/etc', arcname='etc', filter=_overlay_filter)
             archive.add('/opt/travelrouter', arcname='opt/travelrouter')
@@ -87,8 +89,11 @@ def persist_overlay():
         finally:
             os.close(directory_fd)
     finally:
-        temporary.unlink(missing_ok=True)
-        command(['/bin/mount', '-o', 'remount,ro', str(medium)])
+        try:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        finally:
+            command(['/bin/mount', '-o', 'remount,ro', str(medium)])
 
 
 def _overlay_filter(info):
@@ -143,7 +148,8 @@ def initialize(store):
     filtering = Filtering(store)
     zones, _ = filtering.rules()
     atomic_write('/etc/unbound/travelrouter-blocks.conf', zones, 0o644)
-    command(['/sbin/nft', '-f', '-'], input_text=render_firewall(ap, None, 'offline', False))
+    command(['/sbin/nft', '-f', '-'], input_text=render_firewall(
+        ap, None, 'offline', config['setup_complete'], developer=config.get('developer_enabled') is True))
     return config
 
 
@@ -167,9 +173,25 @@ class System:
         self.updates = Updates(self)
 
     def persist(self):
+        self.ensure_no_pending_update()
+        persist_overlay()
+
+    def ensure_no_pending_update(self):
+        if (boot_medium() / '.travelrouter-update').exists():
+            raise ValueError('Restart to confirm or roll back the pending update before changing settings.')
+
+    def persist_for_update(self):
+        marker = boot_medium() / '.travelrouter-update'
+        try:
+            parts = marker.read_text().split()
+        except OSError as error:
+            raise ValueError('The prepared update transaction is unavailable') from error
+        if len(parts) != 5 or parts[0] != 'v1' or parts[1] not in {'application', 'packages'} or parts[2] != 'prepared':
+            raise ValueError('The prepared update transaction is unavailable')
         persist_overlay()
 
     def save_config(self, data):
+        self.ensure_no_pending_update()
         previous = self.store.load()
         self.store.save(data)
         try:
@@ -186,7 +208,49 @@ class System:
         config['dns_mode'] = mode
         self.save_config(config)
 
+    def save_developer(self, data):
+        self.ensure_no_pending_update()
+        enabled = data.get('enabled')
+        if type(enabled) is not bool:
+            raise ValueError('Developer mode must be enabled or disabled')
+        key = validate_public_key(data.get('public_key')) if enabled else ''
+        old_config = self.store.load()
+        directory = Path('/etc/travelrouter')
+        paths = [Path('/etc/shadow'), *(directory / name for name in
+                 ('developer-enabled', 'ssh_authorized_keys', 'sshd_config', 'ssh_host_ed25519_key'))]
+        before = {path: path.read_text() if path.exists() else None for path in paths}
+        command(['/sbin/rc-service', '--nodeps', 'travelrouter-ssh', 'stop'])
+        try:
+            configure_files(Path('/etc'), enabled, key)
+            if enabled:
+                command(['/usr/sbin/sshd', '-t', '-f', '/etc/travelrouter/sshd_config'])
+            config = self.store.load()
+            config['developer_enabled'] = enabled
+            self.save_config(config)
+            self.last_policy = None
+            self.apply(self.state, self.wan)
+            if enabled:
+                command(['/sbin/rc-service', '--nodeps', 'travelrouter-ssh', 'start'])
+        except Exception:
+            # Restore both the live state and its persisted overlay; never log keys.
+            try:
+                for path, content in before.items():
+                    if content is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        atomic_write(path, content)
+                self.store.save(old_config)
+                self.persist()
+                self.last_policy = None
+                self.apply(self.state, self.wan)
+                if old_config.get('developer_enabled') is True:
+                    command(['/sbin/rc-service', '--nodeps', 'travelrouter-ssh', 'start'])
+            except Exception:
+                LOG.error('Could not restore developer access settings; inspect the local console')
+            raise
+
     def save_filtering(self, data):
+        self.ensure_no_pending_update()
         settings = validate_settings(data)
         missing = [country for country in settings['countries']
                    if not (self.filtering.directory / (country + '.zone')).is_file()]
@@ -199,13 +263,14 @@ class System:
         self.filter_revision += 1
 
     def refresh_filtering(self):
+        self.ensure_no_pending_update()
         self.filtering.refresh()
         self.persist()
         self.filter_revision += 1
 
     def backup(self, password):
         config = self.store.load()
-        for key in ('ap_interface', 'wan_interface'):
+        for key in ('ap_interface', 'wan_interface', 'developer_enabled'):
             config.pop(key, None)
         wireguard = Path('/etc/wireguard/trvpn0.conf')
         proxy = Path('/etc/travelrouter/proxy-source.json')
@@ -215,6 +280,7 @@ class System:
         return seal(payload, password)
 
     def restore(self, envelope, password):
+        self.ensure_no_pending_update()
         payload = validate_payload(unseal(envelope, password))
         command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
         self.privacy.stop()
@@ -241,6 +307,8 @@ class System:
                 atomic_write('/etc/travelrouter/proxy-source.json', json.dumps(payload['proxy']))
             config = payload['config']
             config.update(ap_interface=self.ap, wan_interface=self.network.wan)
+            # SSH keys and host identity remain specific to this router.
+            config['developer_enabled'] = old_config.get('developer_enabled') is True
             self.save_config(config)
             self.network.nm('connection', 'reload')
         except Exception:
@@ -258,6 +326,7 @@ class System:
         self.filtering.last_update = 0
 
     def configure_privacy(self, data):
+        self.ensure_no_pending_update()
         # Drop forwarding before touching route tables or tunnel processes.
         command(['/sbin/nft', '-f', '-'],
                 input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
@@ -284,6 +353,9 @@ class System:
                 'firewall': self.last_policy is not None,
                 'filtering': self.filtering.status(),
                 'updates': {**self.updates.status, 'automatic': config.get('auto_updates', False)},
+                'developer_enabled': config.get('developer_enabled') is True,
+                'developer_host_fingerprint': (host_fingerprint(Path('/etc/travelrouter/ssh_host_ed25519_key'))
+                                               if config.get('developer_enabled') is True else None),
                 'hardware_note': None if self.network.wan else
                 'Connect a supported USB Wi-Fi adapter for upstream Wi-Fi.'}
 
@@ -327,12 +399,14 @@ class System:
             effective = 'offline'
         resolvers = self.network.resolvers(wan) if effective == 'captive' and wan else []
         dns_mode = config.get('dns_mode', 'dot')
-        key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode,
+        developer = config.get('developer_enabled') is True
+        key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode, developer,
                self.privacy.mode, self.filter_revision)
         if key == self.last_policy:
             return
         zones, regions = self.filtering.rules()
-        rules = render_firewall(self.ap, wan, effective, config['setup_complete'], self.privacy.mode, regions)
+        rules = render_firewall(self.ap, wan, effective, config['setup_complete'], self.privacy.mode, regions,
+                                developer=developer)
         # Transactional nft replacement must succeed before advertising a new state.
         command(['/sbin/nft', '-f', '-'], input_text=rules)
         zones_path = Path('/etc/unbound/travelrouter-blocks.conf')
@@ -342,9 +416,12 @@ class System:
             atomic_write('/etc/unbound/unbound.conf', render_unbound(dns_mode), 0o644)
             command(['/sbin/rc-service', '--nodeps', 'unbound', 'restart'])
             self.last_dns_mode = dns_mode
-        atomic_write('/etc/dnsmasq.conf', render_dns(self.ap, effective, resolvers), 0o644)
-        # These are our boot dependencies; a normal OpenRC restart would stop us.
-        command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
+        dns_path = Path('/etc/dnsmasq.conf')
+        dns_content = render_dns(self.ap, effective, resolvers)
+        if not dns_path.exists() or dns_path.read_text() != dns_content:
+            atomic_write(dns_path, dns_content, 0o644)
+            # A normal OpenRC restart would stop this controller through dependencies.
+            command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
         self.last_policy = key
         self.state, self.wan = effective, wan
 
@@ -379,6 +456,8 @@ class System:
                 if state == 'online' and (self.filtering.last_update == 0 or time.monotonic() - self.filtering.last_update > 86400):
                     try:
                         # Downloading lists may take time; leave the panel responsive.
+                        with self.lock:
+                            self.ensure_no_pending_update()
                         self.filtering.refresh()
                         with self.lock:
                             self.persist()
@@ -398,6 +477,7 @@ class System:
         return self.network.scan()
 
     def connect(self, **data):
+        self.ensure_no_pending_update()
         identifier = self.network.connect(**data)
         self.persist()
         return identifier
@@ -406,6 +486,7 @@ class System:
         return self.network.saved()
 
     def saved_action(self, **data):
+        self.ensure_no_pending_update()
         self.network.saved_action(**data)
         self.persist()
 

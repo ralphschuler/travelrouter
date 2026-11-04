@@ -57,13 +57,13 @@ class ServiceLifecycleTests(unittest.TestCase):
                 router.apply('offline', None)
                 router.apply('offline', None)
                 self.assertEqual(restarts, ['dnsmasq'])
-                # Changing DNS mode restarts Unbound and applies DNS routing.
+                # Changing only the resolver mode leaves dnsmasq's config unchanged.
                 config['dns_mode'] = 'recursive'
                 router.apply('offline', None)
-                self.assertEqual(restarts, ['dnsmasq', 'unbound', 'dnsmasq'])
+                self.assertEqual(restarts, ['dnsmasq', 'unbound'])
                 # Deferred AP credential/SSID changes run through the real loop.
                 router.pending_restart = 1
                 router.loop()
-                self.assertEqual(restarts, ['dnsmasq', 'unbound', 'dnsmasq', 'hostapd'])
+                self.assertEqual(restarts, ['dnsmasq', 'unbound', 'hostapd'])
                 self.assertEqual(router.pending_restart, 0)
                 self.assertIsNone(router.last_error)

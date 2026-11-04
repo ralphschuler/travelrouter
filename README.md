@@ -36,7 +36,8 @@ build metadata, an application update file, and GitHub build provenance.
 
 All public images share the factory credentials. Perform first setup in a trusted
 location. The image contains no personal Wi-Fi passwords, private VPN keys, or
-developer SSH keys. There is no password-based root login or SSH service.
+developer SSH keys. There is no password-based root login; developer SSH is off
+until an administrator enables it with a public key.
 
 ## Features
 
@@ -44,6 +45,7 @@ developer SSH keys. There is no password-based root login or SSH service.
 |---|---|
 | Networking | Two-radio automatic selection, saved upstream Wi-Fi, DHCP, IPv4 NAT, captive-network sign-in passthrough |
 | Local access | WPA2/CCMP hotspot, client isolation, forced credential rotation, authenticated operations panel |
+| Developer access | Opt-in, key-only SSH restricted to the hotspot, with a router-specific host key |
 | DNS | Unbound cache and DNSSEC, authenticated DNS-over-TLS or full recursive resolution |
 | Privacy routes | WireGuard full tunnel; HTTPS CONNECT or SOCKS5 through a TUN interface; client and Unbound kill-switch |
 | Filtering | HaGeZi Light/TIF Mini, custom block/allow lists, domain-ending blocks, destination-country IPv4 ranges |

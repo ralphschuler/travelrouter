@@ -20,8 +20,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from . import __version__
 from .network import command
+from .recovery import RecoveryUnavailable, Transaction, ensure_ready, sync_directory
 
-CONTEXT = b'TravelRouter application update v1\x00'
+CONTEXT = b'TravelRouter application update v2\x00'
 MIRROR = 'https://dl-cdn.alpinelinux.org/alpine/v3.24'
 
 
@@ -63,14 +64,14 @@ def package_update(files, version, key):
             archive.addfile(entry, io.BytesIO(data))
     payload = buffer.getvalue()
     manifest = {'version': version, 'alpine_branch': 'v3.24', 'sha256': hashlib.sha256(payload).hexdigest()}
-    return {'format': 'travelrouter-update-v1', 'manifest': manifest,
+    return {'format': 'travelrouter-update-v2', 'manifest': manifest,
             'signature': base64.b64encode(key.sign(_signed_bytes(manifest))).decode(),
             'payload': base64.b64encode(payload).decode()}
 
 
 def verify_update(envelope, key, current_version):
     try:
-        if not isinstance(envelope, dict) or envelope.get('format') != 'travelrouter-update-v1':
+        if not isinstance(envelope, dict) or envelope.get('format') != 'travelrouter-update-v2':
             raise ValueError('Unsupported update format')
         if not isinstance(key, Ed25519PublicKey):
             raise ValueError('An Ed25519 release key is required')
@@ -105,6 +106,23 @@ def verify_update(envelope, key, current_version):
         raise ValueError('Update signature or content is invalid') from error
 
 
+def replace_application(staging, target, previous, persist):
+    if previous.exists():
+        shutil.rmtree(previous)
+    old_moved = False
+    try:
+        os.replace(target, previous)
+        old_moved = True
+        os.replace(staging, target)
+        persist()
+    except Exception:
+        if old_moved:
+            if target.exists():
+                shutil.rmtree(target)
+            os.replace(previous, target)
+        raise
+
+
 class Updates:
     def __init__(self, backend):
         self.backend = backend
@@ -128,9 +146,20 @@ class Updates:
                     self.check_release()
                 else:
                     raise ValueError('Unknown update operation')
+            except RecoveryUnavailable as error:
+                self.status['message'] = str(error)
             except Exception:
                 # No command arguments, credentials, or uploaded content in logs.
-                self.status['message'] = 'Update failed validation or could not be staged. Current installation remains available.'
+                from .system import boot_medium
+                try:
+                    pending = (boot_medium() / '.travelrouter-update').exists()
+                except (OSError, RuntimeError):
+                    pending = False
+                if pending:
+                    self.status.update(message='Update failed or another update is pending. Restart to restore or confirm the saved installation.',
+                                       reboot_required=True)
+                else:
+                    self.status['message'] = 'Update failed validation or could not be staged. Current installation remains available.'
             finally:
                 self.last_check = time.monotonic()
                 self.status['busy'] = False
@@ -148,9 +177,12 @@ class Updates:
         self.status['message'] = 'Latest release: ' + latest['tag_name'] if latest else 'No release is published yet'
 
     def install_application(self, envelope):
+        from .system import boot_medium
         key = serialization.load_pem_public_key(Path('/etc/travelrouter/update-public.pem').read_bytes())
         manifest, files = verify_update(envelope, key, self.status.get('staged_version', __version__))
         with self.backend.lock:
+            medium = boot_medium()
+            ensure_ready(medium)
             staging = Path(tempfile.mkdtemp(prefix='.travelrouter-update-', dir='/opt'))
             try:
                 for name, content in files.items():
@@ -158,17 +190,19 @@ class Updates:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes(content)
                     path.chmod(0o644)
-                target, previous = Path('/opt/travelrouter'), Path('/opt/.travelrouter-previous')
-                if previous.exists():
-                    shutil.rmtree(previous)
-                os.replace(target, previous)
-                os.replace(staging, target)
+                command(['/bin/mount', '-o', 'remount,rw', str(medium)])
                 try:
-                    self.backend.persist()
-                except Exception:
-                    shutil.rmtree(target)
-                    os.replace(previous, target)
-                    raise
+                    transaction = Transaction(medium)
+                    transaction.prepare_application(manifest['version'])
+                finally:
+                    command(['/bin/mount', '-o', 'remount,ro', str(medium)])
+                target, previous = Path('/opt/travelrouter'), Path('/opt/.travelrouter-previous')
+                replace_application(staging, target, previous, self.backend.persist_for_update)
+                command(['/bin/mount', '-o', 'remount,rw', str(medium)])
+                try:
+                    transaction.mark_ready()
+                finally:
+                    command(['/bin/mount', '-o', 'remount,ro', str(medium)])
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
@@ -187,6 +221,9 @@ class Updates:
                 self.status['message'] = 'Alpine stable packages are current'
                 return
             medium = boot_medium()
+            ensure_ready(medium)
+            if (medium / '.travelrouter-update').exists():
+                raise RecoveryUnavailable('Restart to confirm or roll back the pending update first.')
             if shutil.disk_usage(medium).free < 1024 * 1024 * 1024:
                 raise ValueError('At least 1 GiB free boot space is required for package staging')
             command(['/bin/mount', '-o', 'remount,rw', str(medium)])
@@ -234,13 +271,18 @@ class Updates:
                     if previous.is_symlink() or previous.resolve().parent != medium.resolve():
                         raise ValueError('Invalid previous repository location')
                     shutil.rmtree(previous)
-                os.replace(medium / 'repositories', previous)
+                transaction = Transaction(medium)
+                transaction.prepare_packages()
+                transaction.back_up_repositories()
                 os.replace(repositories, medium / 'repositories')
+                sync_directory(medium)
                 # Persistence remounts the boot medium read-only, including on failure.
                 # Finish all temporary filesystem cleanup before crossing that boundary.
                 shutil.rmtree(staging)
                 staging = None
-                self.backend.persist()
+                self.backend.persist_for_update()
+                command(['/bin/mount', '-o', 'remount,rw', str(medium)])
+                transaction.mark_ready()
                 self.status.update(message='Verified Alpine packages staged for next boot. Kernel updates use a full release image.',
                                    reboot_required=True)
             finally:

@@ -23,10 +23,10 @@ def build(source, target):
     (overlay / 'etc/shadow').write_text('root:!:19000:0:99999:7:::\n')
     (overlay / 'etc/shadow').chmod(0o600)
     services = {
-        'sysinit': ['devfs', 'dmesg', 'udev', 'udev-trigger', 'hwdrivers', 'modloop'],
+        'sysinit': ['devfs', 'dmesg', 'udev', 'udev-trigger', 'hwdrivers', 'modloop', 'travelrouter-recovery'],
         'boot': ['modules', 'sysctl', 'hostname', 'bootmisc', 'syslog', 'localmount'],
         'default': ['crond', 'dbus', 'networkmanager', 'hostapd', 'dnsmasq', 'unbound', 'chronyd',
-                    'travelrouter-bootstrap', 'travelrouter'],
+                    'travelrouter-bootstrap', 'travelrouter', 'travelrouter-ssh'],
         'shutdown': ['mount-ro', 'killprocs', 'savecache'],
     }
     for level, names in services.items():

@@ -52,7 +52,7 @@ def render_dns(ap, state, resolvers):
     return '\n'.join(lines) + '\n'
 
 
-def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=()):
+def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=(), developer=False):
     interface(ap)
     if wan:
         interface(wan)
@@ -62,6 +62,8 @@ def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=()
         raise ValueError('Invalid connectivity state')
     if privacy not in {'direct', 'wireguard', 'proxy'}:
         raise ValueError('Invalid privacy mode')
+    if type(developer) is not bool:
+        raise ValueError('Developer mode must be a boolean')
     physical_wan = wan
     if privacy != 'direct':
         wan = 'trvpn0' if privacy == 'wireguard' else 'trproxy0'
@@ -77,7 +79,10 @@ def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=()
              ' chain input { type filter hook input priority filter; policy drop;',
              '  iifname "lo" accept', '  ct state invalid drop',
              f'  iifname "{ap}" tcp dport 80 meter panel_rate {{ ip saddr timeout 1m limit rate over 20/second burst 40 packets }} drop',
-             '  meta nfproto ipv6 drop', '  ct state established,related accept',
+             '  meta nfproto ipv6 drop']
+    if developer and setup_complete:
+        lines.append(f'  iifname "{ap}" ip saddr {LAN_NETWORK} tcp dport 22 accept')
+    lines += ['  tcp dport 22 drop', '  ct state established,related accept',
              f'  iifname "{ap}" udp sport 68 udp dport 67 accept',
              f'  iifname "{ap}" ip saddr {LAN_NETWORK} udp dport 53 accept',
              f'  iifname "{ap}" ip saddr {LAN_NETWORK} tcp dport {{ 53, 80 }} accept',

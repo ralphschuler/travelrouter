@@ -48,6 +48,20 @@ This includes stable-branch fixes beyond strictly security-only releases.
 Updates need free boot space and verified Internet connectivity. No reboot is
 performed without an explicit user action.
 
+Recovery-enabled images require a free, stoppable hardware watchdog before
+staging updates. After reboot, the router confirms an update only after its
+local services pass health checks; an interrupted or failed trial is restored
+on the next boot. Settings cannot be persisted while an update awaits reboot.
+This is experimental and does not cover broken hardware, corruption of the
+boot firmware or initramfs, or devices without a usable watchdog. Keep an
+independent backup and a physical recovery path.
+
+Images built before recovery support (including v0.2.0) cannot gain early boot
+recovery through an application-only update. Install a recovery-enabled full
+image and restore an encrypted settings backup instead. The new update format
+uses a separate signing context so older versions cannot accept it by relabelling
+the file.
+
 Download an official `travelrouter-update.tru` for application-only updates and
 upload it to the panel. Ed25519 signature, compatibility, version, archive paths
 and sizes are checked before installation. Reboot to activate the staged code.
@@ -62,13 +76,26 @@ mode. The FAT boot volume is readable from the host:
 
 - `travelrouter.apkovl.tar.gz` contains the current persistent overlay.
 - `travelrouter.previous.tar.gz.bak` is the preceding configuration generation.
-- `.repositories.previous` contains the preceding package repository after a
-  package update.
+- `.travelrouter-recovery` contains the previous overlay or package repository
+  while a recoverable update is pending.
 
 Recover by restoring the preceding overlay filename on the powered-off device,
 or reflashing a known-good release and importing your encrypted backup. Do not
-replace a live mounted boot medium while the router is running. The root account
-is locked and SSH is disabled; this USB recovery path is deliberate.
+replace a live mounted boot medium while the router is running. SSH is off by
+default. This USB recovery path remains necessary for firmware or boot failures.
+
+## Developer SSH
+
+Under **Settings & backups**, explicitly enable developer access and paste one
+Ed25519 public key. The key grants full root access, so protect its private key.
+For example, create a dedicated key with `ssh-keygen -t ed25519 -f ~/.ssh/travelrouter`
+and paste only the contents of `~/.ssh/travelrouter.pub`.
+SSH listens only on `10.42.0.1` and the firewall accepts it only from the
+hotspot. Password authentication and forwarding are disabled. Compare the host
+fingerprint shown in the panel with the fingerprint your SSH client displays,
+then connect with `ssh -i ~/.ssh/travelrouter root@10.42.0.1`. Disable developer access in the panel
+when finished. SSH keys and host identity are specific to the router and are
+not exported in settings backups.
 
 The first release has not been qualified for unattended deployment. Validate the
 hardware checklist, including reboot persistence and a VPN outage, before travel.
