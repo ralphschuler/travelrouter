@@ -23,6 +23,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REMOTE = '/root/ci-image-test'
+SHELL_PROMPT = rb'(?:^|\r?\n)(?:/|~) # $'
 
 
 def require(condition, message):
@@ -57,6 +58,27 @@ def expand_image(source, target):
                 output.write(chunk)
         output.truncate()
     return compressed_hash.hexdigest(), digest.hexdigest()
+
+
+def declare_emulated_ram(dtb, report):
+    """Work around QEMU 11.0.3 omitting raspi4b's allocated upper RAM bank."""
+    fdtget, fdtput = executable('fdtget'), executable('fdtput')
+    for property_name, expected in [('#address-cells', '2'), ('#size-cells', '1')]:
+        actual = host_command([fdtget, '-t', 'x', str(dtb), '/', property_name]).strip()
+        require(actual == expected, f'Unexpected shipped Pi4 DTB {property_name}: {actual}')
+    report['shipped_dtb_sha256'] = hashlib.sha256(dtb.read_bytes()).hexdigest()
+    # raspi.c exposes low RAM only up to 0x3c000000 (960 MiB), preserving
+    # 64 MiB for VideoCore. raspi4b.c mistakenly tests that reduced boot size
+    # before declaring the actual 0x40000000..0x7fffffff upper bank.
+    # boot.c replaces nodes named memory@*, so use device_type=memory under
+    # a distinct RAM node; Linux's early memory scan recognizes that type.
+    # Only this extracted test DTB changes. Kernel, initramfs and SD stay exact.
+    node = '/ram@40000000'
+    host_command([fdtput, '-c', str(dtb), node])
+    host_command([fdtput, '-t', 's', str(dtb), node, 'device_type', 'memory'])
+    host_command([fdtput, '-t', 'x', str(dtb), node, 'reg', '0', '40000000', '40000000'])
+    report['test_dtb_sha256'] = hashlib.sha256(dtb.read_bytes()).hexdigest()
+    report['dtb_fixup'] = 'Declare QEMU upper 1 GiB RAM bank at 0x40000000; preserve low VideoCore reservation'
 
 
 class Console:
@@ -109,11 +131,12 @@ class Console:
         raise TimeoutError(f'Guest did not reach expected state within {timeout} seconds')
 
     def boot(self):
-        self.expect(rb'(?:^|\r?\n)[^\r\n]*# ', 900)
+        self.expect(SHELL_PROMPT, 900)
         self.ready = True
         self.command('stty -echo', timeout=10)
         self.command(f'mkdir -p {REMOTE}; chmod 700 {REMOTE}', timeout=10)
         self.command('test -f /opt/travelrouter/travelrouter/web.py', timeout=10)
+        self.command("awk '$1==\"MemTotal:\" {ok=($2>=1800000)} END {exit !ok}' /proc/meminfo", timeout=10)
 
     def command(self, command, timeout=120, check=True):
         marker = 'CI_DONE_' + secrets.token_hex(8)
@@ -183,6 +206,7 @@ def run(args, report):
                                      ('bcm2711-rpi-4-b.dtb', 'board.dtb')]:
         host_command([mcopy, '-o', '-i', f'{raw}@@{offset}', f'::/{source_path}',
                       str(args.scratch / destination)])
+    declare_emulated_ram(args.scratch / 'board.dtb', report)
     kernel = args.scratch / 'kernel'
     if kernel.read_bytes()[:2] == b'\x1f\x8b':
         kernel.write_bytes(gzip.decompress(kernel.read_bytes()))
@@ -201,7 +225,8 @@ def run(args, report):
                           'modules=loop,squashfs,sd-mod,usb-storage '
                           'init=/bin/sh init_args=-i rootflags=size=1536M']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
-                          'CI init shell and mac80211_hwsim radios. No CM5 firmware, RP1 or physical radio qualification.')
+                          'CI init shell, DTB RAM-bank declaration and mac80211_hwsim radios. '
+                          'No CM5 firmware, RP1 or physical radio qualification.')
     for phase in ('initial', 'restored'):
         report['stage'] = phase + ': boot'
         print('Booting real image:', phase, flush=True)
@@ -212,11 +237,15 @@ def run(args, report):
             console.boot()
             console.upload(HERE / 'prepare.sh')
             console.upload(HERE / 'client.py')
+            console.upload(HERE / 'firewall.py')
             report['stage'] = phase + ': OpenRC, WPA2 and DHCP'
             console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
             # Verify the synthetic external server is really alive before testing denial.
             console.command("ip netns exec tr-untrusted python3 -c \"import socket; "
                             "socket.create_connection(('198.18.0.2',8080),3).close()\"")
+            report['stage'] = phase + ': measured firewall denial'
+            result = console.command(f'python3 {REMOTE}/firewall.py', timeout=90)
+            (output / 'firewall-results.txt').write_text(result)
             console.command(f'ip netns exec tr-untrusted python3 {REMOTE}/client.py untrusted', timeout=30)
             report['stage'] = phase + ': client HTTP, DNS and credentials'
             result = console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py {phase}', timeout=120)

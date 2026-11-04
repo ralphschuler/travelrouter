@@ -12,6 +12,12 @@ image and starts QEMU's `raspi4b` machine. Its writable qcow2 layer leaves the
 base image unchanged. Alpine restores the image's `apkovl` and installs its
 embedded APK packages through the normal diskless initramfs path.
 
+The extracted test device tree declares the emulator's upper 1 GiB RAM bank:
+QEMU 11.0.3 otherwise advertises only its lower 960 MiB to Linux despite allocating
+2 GiB. The reserved VideoCore region stays excluded. Original/test device-tree
+hashes and this fixup are recorded in `result.json`; the release image, kernel
+and initramfs are unchanged.
+
 A CI-only initial shell loads `mac80211_hwsim` and creates three simulated radios:
 two for the router and one in a separate client network namespace. It runs the
 shipped OpenRC sysinit, boot and default runlevels. Production service files,
@@ -29,6 +35,12 @@ The client checks:
   association, DHCP exchange, login, metrics request and logs request.
 - Denial of management access from synthetic untrusted ingress and forwarding
   while the router is offline.
+
+Firewall denial checks first require successful HTTP over the same network path
+with narrowly scoped temporary test allowances. After removing those allowances,
+fresh connections must hit passive counters immediately before the shipped drop
+policy. A timeout caused by a broken route cannot pass this check. The temporary
+rules exist only in the disposable VM and are cleaned up after each measurement.
 
 ## Boundaries
 
