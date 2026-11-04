@@ -14,8 +14,11 @@
   dnsmasq, nftables, sing-box and hostapd parsers.
 - The added [image boot test](image-testing.md) uses QEMU and simulated Wi-Fi
   radios to exercise the finished image's service startup and client protocols.
-  Its first validation run is in progress; this record does not yet claim a
-  successful emulated boot or a fix for the reported panel access failure.
+  It reproduced a stopped resolver and the controller stopping itself through
+  OpenRC's reverse dependency handling during a DNS restart. Both generic UEFI
+  installers completed disk installation and independent full-image verification,
+  then reached the same runtime failure. Corrections are implemented; complete
+  client-flow and reboot qualification of the corrected images is pending.
 - CodeQL scans Python, JavaScript and workflows. Secret scanning, dependency
   audit, lint, tests and an image package vulnerability scan gate releases.
 - The local disposable browser preview verified forced setup, authenticated

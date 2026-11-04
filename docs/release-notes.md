@@ -12,6 +12,12 @@ Generic ARM64 does not replace board-specific firmware. Generic runtimes require
 Secure Boot to be disabled and do not support legacy BIOS boot. All targets need
 an AP-capable supported Wi-Fi radio; a separate radio provides upstream Wi-Fi.
 
+This release also corrects the service lifecycle behind the disappearing panel:
+controller-managed DNS and access-point restarts preserve the controller instead
+of stopping it through OpenRC's reverse dependencies. Startup explicitly prepares
+loopback for local DNS. RAM-root capacity scales with installed memory, and all
+targets include the OpenSSL executable needed for signed module verification.
+
 Download the matching image and `SHA256SUMS`. Verify the checksum,
 then select the compressed image in Raspberry Pi Imager using **Use custom**.
 Writing an image erases the selected device. Keep a verified backup first.
