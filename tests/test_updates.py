@@ -100,10 +100,17 @@ class PackageStagingTests(unittest.TestCase):
                 elif 'list' in arguments:
                     return 'python3-3.14.10-r1\n'
                 elif 'fetch' in arguments:
+                    # APK 3 downloads even with --url and emits nothing when
+                    # the package already exists in its output directory.
+                    self.assertIn('--output', arguments, 'fetch must never write into the daemon cwd')
+                    output = Path(arguments[arguments.index('--output') + 1])
+                    package = output / 'python3-3.14.10-r1.apk'
+                    if package.exists():
+                        return ''
+                    package.write_bytes(b'fixture package')
+                    events.append('fetch')
                     if '--url' in arguments:
                         return MIRROR + '/main/x86_64/python3-3.14.10-r1.apk\n'
-                    output = Path(arguments[arguments.index('--output') + 1])
-                    (output / 'python3-3.14.10-r1.apk').write_bytes(b'fixture package')
                 return ''
 
             def cleanup(path):
@@ -146,6 +153,7 @@ class PackageStagingTests(unittest.TestCase):
                     self.assertTrue(updates.status['reboot_required'])
                     self.assertIn('Verified Alpine packages staged', updates.status['message'])
                 self.assertEqual(events[-1], 'remount,ro')
+                self.assertEqual(events.count('fetch'), 1)
                 self.assertTrue(state['readonly'])
                 if cleanup_fails:
                     self.assertNotIn('persist', events)

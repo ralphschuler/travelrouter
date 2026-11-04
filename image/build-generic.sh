@@ -144,10 +144,10 @@ done < "$build_dir/installer-package-urls.txt"
 installer_check="$build_dir/installer-check"
 mkdir -p "$installer_check/etc/apk/keys"
 cp -a /etc/apk/keys/. "$installer_check/etc/apk/keys/"
-# Match the stock ISO's existing Alpine base, then install tools using ONLY the
+# Install the base from the actual stock ISO, then add tools using ONLY the
 # minimal installer repositories. No installer dependency can leak from runtime.
 apk --root "$installer_check" --initdb --no-network --repositories-file /dev/null \
-    --repository "$build_dir/media/repositories/main" --repository "$build_dir/media/repositories/community" add alpine-base
+    --repository "$build_dir/upstream/apks" add alpine-base
 apk --root "$installer_check" --no-network --repositories-file /dev/null \
     --repository "$payload/repositories/main" --repository "$payload/repositories/community" add python3 lsblk
 chroot "$installer_check" /usr/bin/python3 -c 'import fcntl, gzip, hashlib, json, pathlib, platform, stat, struct, subprocess'

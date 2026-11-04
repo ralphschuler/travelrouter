@@ -199,8 +199,10 @@ class Updates:
                 args = ['/sbin/apk', '--repositories-file', '/dev/null', '--repository', MIRROR + '/main',
                         '--repository', MIRROR + '/community']
                 self.status['message'] = 'Downloading signed Alpine stable packages'
-                command([*args, 'fetch', '--recursive', '--output', str(cache), *packages], timeout=1200)
-                urls = command([*args, 'fetch', '--recursive', '--url', *packages], timeout=60).splitlines()
+                # APK 3 --url downloads too, and omits URLs for existing files.
+                # Fetch once into the fresh staging cache, never the daemon cwd.
+                urls = command([*args, 'fetch', '--recursive', '--url', '--output', str(cache), *packages],
+                               timeout=1200).splitlines()
                 repositories = staging / 'repositories'
                 for repository in ('main', 'community'):
                     directory = repositories / repository / architecture
