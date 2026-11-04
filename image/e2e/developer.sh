@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
 # Run only inside the disposable CI container; never against a host system.
-[ -f /.dockerenv ] && [ "${TRAVELROUTER_TEST_CONTAINER:-}" = yes ] || {
+if [ ! -f /.dockerenv ] || [ "${TRAVELROUTER_TEST_CONTAINER:-}" != yes ]; then
     echo 'This test requires its disposable Docker container.' >&2
     exit 1
-}
+fi
 mkdir -p /run/openrc /var/empty
 printf '%s\n' default > /run/openrc/softlevel
 cp /source/rootfs/etc/init.d/travelrouter-ssh /etc/init.d/travelrouter-ssh
