@@ -1,4 +1,5 @@
 #!/sbin/openrc-run
+# shellcheck disable=SC2034
 description="TravelRouter local portal and connectivity controller"
 command=/usr/bin/python3
 command_args="-m travelrouter"

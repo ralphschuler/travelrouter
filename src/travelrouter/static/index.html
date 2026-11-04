@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TravelRouter</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/forms.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -32,6 +33,19 @@
       </form>
     </section>
     <div id="panel" hidden>
+      <section class="card"><p class="eyebrow">PRIVACY CONTROLS</p><h2>Your route to the Internet</h2><p id="privacy-status">Checking privacy settings.</p>
+        <form id="dns-form"><label>DNS resolution<select name="mode"><option value="dot">DNS-over-TLS · encrypted upstream</option><option value="recursive">Recursive Unbound · root servers, unencrypted DNS transport</option></select></label><p class="hint">Both modes validate DNSSEC and cache responses locally. DNS follows the active protected tunnel.</p><button>Save DNS mode</button></form>
+        <form id="privacy-form"><label>Privacy route<select name="mode"><option value="direct">Direct connection · no VPN (also for public-network sign-in)</option><option value="wireguard">WireGuard VPN · full tunnel with kill-switch</option><option value="proxy">Proxy tunnel · HTTPS CONNECT or SOCKS5 with kill-switch</option></select></label>
+          <label>WireGuard configuration<textarea name="config" rows="6" placeholder="Paste your provider's [Interface] and [Peer] configuration. Leave empty to reuse the saved tunnel." autocomplete="off"></textarea></label>
+          <p class="hint">Only a single full IPv4 tunnel is accepted. Imported scripts, hooks and custom routes are rejected. IPv6 routing is disabled.</p>
+          <label>Proxy type<select name="type"><option value="https">HTTPS CONNECT (TLS with certificate validation)</option><option value="socks5">SOCKS5 (unencrypted transport)</option></select></label>
+          <label>Proxy hostname<input name="server" maxlength="253" autocomplete="off" placeholder="Leave empty to reuse the saved proxy"></label><label>Proxy port<input name="port" type="number" min="1" max="65535" value="443"></label>
+          <label>Proxy username<input name="username" maxlength="256" autocomplete="off"></label><label>Proxy password<input name="password" type="password" maxlength="256" autocomplete="off"></label>
+          <label class="checkbox"><input name="acknowledge_plaintext" type="checkbox">I understand SOCKS5 does not encrypt the connection to the proxy.</label>
+          <p class="hint">Protected modes block direct client access if the tunnel fails. To sign into a hotel network, explicitly select Direct, complete its sign-in, then re-enable your protected mode. HTTPS CONNECT supports TCP; unsupported UDP traffic is blocked.</p>
+          <button>Apply privacy route</button>
+        </form>
+      </section>
       <div class="grid">
         <section class="card"><p class="eyebrow">UPSTREAM</p><h2>Find a connection</h2><p>Choose a nearby Wi-Fi network. Saved networks reconnect automatically.</p><button id="scan" type="button">Scan nearby networks</button><div id="networks" class="networks"></div>
           <form id="connect-form"><label>Network name<input name="ssid" maxlength="32" required autocomplete="off"></label><label>Network password<input name="password" type="password" maxlength="63" autocomplete="off"></label><label class="checkbox"><input name="allow_open" type="checkbox">This is an open network; connect without a password.</label><button>Connect and save <span>→</span></button></form>

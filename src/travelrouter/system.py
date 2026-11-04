@@ -14,8 +14,10 @@ import time
 from pathlib import Path
 
 from .config import atomic_write
+from .filtering import Filtering, validate_settings
 from .network import Network, command
-from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall
+from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
+from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
 
 LOG = logging.getLogger(__name__)
@@ -126,6 +128,10 @@ def initialize(store):
     command(['/sbin/ip', 'address', 'replace', LAN_IP + '/24', 'dev', ap])
     atomic_write('/etc/hostapd/hostapd.conf', hostapd_config(ap, config))
     atomic_write('/etc/dnsmasq.conf', render_dns(ap, 'offline', []), 0o644)
+    atomic_write('/etc/unbound/unbound.conf', render_unbound(config.get('dns_mode', 'dot')), 0o644)
+    filtering = Filtering(store)
+    zones, _ = filtering.rules()
+    atomic_write('/etc/unbound/travelrouter-blocks.conf', zones, 0o644)
     command(['/sbin/nft', '-f', '-'], input_text=render_firewall(ap, None, 'offline', False))
     return config
 
@@ -136,6 +142,10 @@ class System:
         config = store.load()
         self.ap = config['ap_interface']
         self.network = Network(config.get('wan_interface'))
+        self.privacy = Privacy(store)
+        self.filtering = Filtering(store)
+        self.filter_revision = 0
+        self.last_dns_mode = config.get('dns_mode', 'dot')
         self.lock = threading.RLock()
         self.state = 'offline'
         self.wan = None
@@ -155,16 +165,58 @@ class System:
         except Exception:
             self.store.save(previous)
             raise
-        self.pending_restart = time.monotonic() + 3
+        if any(previous[key] != data[key] for key in ('ssid', 'ap_password', 'country')):
+            self.pending_restart = time.monotonic() + 3
+
+    def save_dns(self, mode):
+        render_unbound(mode)
+        config = self.store.load()
+        config['dns_mode'] = mode
+        self.save_config(config)
+
+    def save_filtering(self, data):
+        settings = validate_settings(data)
+        missing = [country for country in settings['countries']
+                   if not (self.filtering.directory / (country + '.zone')).is_file()]
+        if missing:
+            self.filtering.refresh(settings)
+        self.filtering.rules(settings)
+        config = self.store.load()
+        config['filtering'] = settings
+        self.save_config(config)
+        self.filter_revision += 1
+
+    def refresh_filtering(self):
+        self.filtering.refresh()
+        self.persist()
+        self.filter_revision += 1
+
+    def configure_privacy(self, data):
+        # Drop forwarding before touching route tables or tunnel processes.
+        command(['/sbin/nft', '-f', '-'],
+                input_text=render_firewall(self.ap, self.wan, 'offline', False))
+        self.last_policy = None
+        self.privacy.stop()
+        mode = self.privacy.prepare(data, self.wan)
+        config = self.store.load()
+        config['privacy_mode'] = mode
+        self.save_config(config)
+        self.apply('offline', self.wan)
+        self.privacy.start()
 
     def status(self):
         config = self.store.load()
         return {'state': self.state, 'setup_complete': config['setup_complete'],
                 'ssid': config['ssid'], 'country': config['country'], 'ap_interface': self.ap,
                 'wan_interface': self.network.wan, 'active_upstream': self.wan,
+                'privacy_mode': self.privacy.mode,
+                'tunnel_ready': bool(self.privacy.egress and Path('/sys/class/net/' + self.privacy.egress).exists()),
+                'dns_mode': config.get('dns_mode', 'dot'),
                 'last_error': self.last_error, 'address': LAN_IP,
-                'dns': 'Unbound DNS-over-TLS' if self.state == 'online' else self.state,
+                'dns': ('Unbound DNS-over-TLS' if config.get('dns_mode', 'dot') == 'dot'
+                        else 'Unbound recursive DNS') if self.state == 'online' else self.state,
                 'firewall': self.last_policy is not None,
+                'filtering': self.filtering.status(),
                 'hardware_note': None if self.network.wan else
                 'Connect a supported USB Wi-Fi adapter for upstream Wi-Fi.'}
 
@@ -173,7 +225,7 @@ class System:
         routes.sort(key=lambda route: route.get('metric', 0))
         for route in routes:
             device = route.get('dev')
-            if device and device != self.ap:
+            if device and device not in {self.ap, VPN_INTERFACE, PROXY_INTERFACE}:
                 return interface(device)
         return None
 
@@ -205,12 +257,22 @@ class System:
         config = self.store.load()
         effective = state if config['setup_complete'] else 'offline'
         resolvers = self.network.resolvers(wan) if effective == 'captive' and wan else []
-        key = (effective, wan, config['setup_complete'], tuple(resolvers))
+        dns_mode = config.get('dns_mode', 'dot')
+        key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode,
+               self.privacy.mode, self.filter_revision)
         if key == self.last_policy:
             return
-        rules = render_firewall(self.ap, wan, effective, config['setup_complete'])
+        zones, regions = self.filtering.rules()
+        rules = render_firewall(self.ap, wan, effective, config['setup_complete'], self.privacy.mode, regions)
         # Transactional nft replacement must succeed before advertising a new state.
         command(['/sbin/nft', '-f', '-'], input_text=rules)
+        zones_path = Path('/etc/unbound/travelrouter-blocks.conf')
+        zones_changed = not zones_path.exists() or zones_path.read_text() != zones
+        if dns_mode != self.last_dns_mode or zones_changed:
+            atomic_write(zones_path, zones, 0o644)
+            atomic_write('/etc/unbound/unbound.conf', render_unbound(dns_mode), 0o644)
+            command(['/sbin/rc-service', 'unbound', 'restart'])
+            self.last_dns_mode = dns_mode
         atomic_write('/etc/dnsmasq.conf', render_dns(self.ap, effective, resolvers), 0o644)
         command(['/sbin/rc-service', 'dnsmasq', 'restart'])
         self.last_policy = key
@@ -222,7 +284,13 @@ class System:
             try:
                 # Probes run outside the mutation lock so the panel stays responsive.
                 wan = self.active_wan()
-                state = self._probe(wan)
+                with self.lock:
+                    if self.store.load()['setup_complete'] and wan:
+                        self.privacy.start()
+                probe_interface = self.privacy.egress or wan
+                state = self._probe(probe_interface)
+                if self.privacy.mode != 'direct' and state != 'online':
+                    state = 'offline'
                 with self.lock:
                     radios = discover_radios()
                     self.network.wan = next((radio for radio in radios if radio != self.ap), None)
@@ -238,6 +306,16 @@ class System:
                         command(['/sbin/rc-service', 'hostapd', 'restart'])
                         self.pending_restart = 0
                     self.last_error = None
+                if self.state == 'online' and time.monotonic() - self.filtering.last_update > 86400:
+                    try:
+                        # Downloading lists may take time; leave the panel responsive.
+                        self.filtering.refresh()
+                        with self.lock:
+                            self.persist()
+                            self.filter_revision += 1
+                    except (OSError, ValueError, RuntimeError):
+                        self.filtering.error = 'List refresh failed; previous valid lists remain in use.'
+                        self.filtering.last_update = time.monotonic() - 82800
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                 LOG.exception('Router state update failed')
                 self.last_error = 'A network operation failed; check the local console log.'

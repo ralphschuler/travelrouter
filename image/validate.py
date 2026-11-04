@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from travelrouter.policy import render_dns, render_firewall  # noqa: E402
+from travelrouter.policy import render_dns, render_firewall, render_unbound  # noqa: E402
+from travelrouter.privacy import proxy_config  # noqa: E402
 from travelrouter.system import hostapd_config  # noqa: E402
 
 
@@ -19,24 +20,34 @@ def executable(root, name):
 
 
 def run(root, binary, *args):
-    subprocess.run([shutil.which('chroot'), str(root), executable(root, binary), *args], check=True)
+    # All command names/arguments originate in this build script, never HTTP.
+    subprocess.run([shutil.which('chroot'), str(root), executable(root, binary), *args], check=True)  # nosec B603
 
 
 def validate(root):
     root = Path(root)
     (root / 'run/travelrouter').mkdir(parents=True, exist_ok=True)
+    (root / 'etc/unbound/travelrouter-blocks.conf').write_text('local-zone: "blocked.example" always_nxdomain\n')
     for entry in (root / 'etc/runlevels').glob('*/*'):
         if not (root / 'etc/init.d' / entry.name).is_file():
             raise RuntimeError(f'Missing OpenRC service: {entry.name}')
     run(root, '/bin/sh', '-c', 'command -v nmcli hostapd dnsmasq nft unbound-checkconf rfkill ip curl python3')
-    run(root, '/usr/sbin/unbound-checkconf', '/etc/unbound/unbound.conf')
+    for mode in ('dot', 'recursive'):
+        (root / 'etc/unbound/unbound.conf').write_text(render_unbound(mode))
+        run(root, 'unbound-checkconf', '/etc/unbound/unbound.conf')
     for state in ('offline', 'captive', 'online'):
         (root / 'etc/dnsmasq.conf').write_text(render_dns('wlan0', state, ['192.168.1.1']))
         run(root, '/usr/sbin/dnsmasq', '--test')
-        rules = render_firewall('wlan0', 'wlan1', state, True)
-        (root / 'run/travelrouter/rules.nft').write_text(rules)
-        # The workflow gives this container NET_ADMIN for a real kernel check.
-        run(root, 'nft', '--check', '--file', '/run/travelrouter/rules.nft')
+        for privacy in ('direct', 'wireguard', 'proxy'):
+            rules = render_firewall('wlan0', 'wlan1', state, True, privacy, ['8.8.8.0/24'])
+            (root / 'run/travelrouter/rules.nft').write_text(rules)
+            run(root, 'nft', '--check', '--file', '/run/travelrouter/rules.nft')
+    for kind in ('https', 'socks5'):
+        proxy = proxy_config({'type': kind, 'server': 'proxy.example.org', 'port': 443,
+                              'acknowledge_plaintext': True}, '192.0.2.9', 'wlan1')
+        import json
+        (root / 'run/travelrouter/proxy.json').write_text(json.dumps(proxy))
+        run(root, 'sing-box', 'check', '-c', '/run/travelrouter/proxy.json')
     config = {'ssid': 'Validation AP', 'ap_password': secrets.token_urlsafe(20), 'country': 'DE'}
     (root / 'etc/hostapd/hostapd.conf').write_text(hostapd_config('validation0', config))
     # hostapd has no syntax-only mode. It must parse before reaching nl80211.

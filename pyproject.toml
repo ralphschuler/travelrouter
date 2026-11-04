@@ -3,7 +3,7 @@ name = "travelrouter"
 version = "0.1.0"
 description = "Offline-first Alpine travel router for Raspberry Pi CM5"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["cryptography>=46.0.0"]
 
 [tool.ruff]
 line-length = 140

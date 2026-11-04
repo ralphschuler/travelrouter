@@ -102,9 +102,10 @@ def make_server(address, store, backend):
             if path == '/api/status':
                 self.send(200, backend.status())
                 return
-            if path in {'/', '/app.js', '/style.css'}:
+            if path in {'/', '/app.js', '/style.css', '/forms.css'}:
                 name, kind = {'/': ('index.html', 'text/html; charset=utf-8'),
                               '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                              '/forms.css': ('forms.css', 'text/css; charset=utf-8'),
                               '/style.css': ('style.css', 'text/css; charset=utf-8')}[path]
                 self.send(200, (ASSETS / name).read_bytes(), content_type=kind)
                 return
@@ -205,6 +206,18 @@ def make_server(address, store, backend):
                 self.send(200, {'reconnect': True, 'ssid': ssid})
             elif path == '/api/scan':
                 self.send(200, {'networks': backend.scan()})
+            elif path == '/api/dns':
+                backend.save_dns(data.get('mode'))
+                self.send(200, {'saved': True})
+            elif path == '/api/filtering':
+                backend.save_filtering(data)
+                self.send(200, {'saved': True})
+            elif path == '/api/filtering/refresh':
+                backend.refresh_filtering()
+                self.send(200, {'saved': True})
+            elif path == '/api/privacy':
+                backend.configure_privacy(data)
+                self.send(200, {'saved': True})
             elif path == '/api/saved':
                 self.send(200, {'networks': backend.saved()})
             elif path == '/api/connect':

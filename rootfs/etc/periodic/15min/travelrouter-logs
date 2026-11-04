@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/sbin/logrotate --state /run/travelrouter/logrotate.state /etc/logrotate.d/travelrouter

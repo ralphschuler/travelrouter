@@ -25,7 +25,7 @@ def build(source, target):
     services = {
         'sysinit': ['devfs', 'dmesg', 'udev', 'udev-trigger', 'hwdrivers', 'modloop'],
         'boot': ['modules', 'sysctl', 'hostname', 'bootmisc', 'syslog', 'localmount'],
-        'default': ['dbus', 'networkmanager', 'hostapd', 'dnsmasq', 'unbound', 'chronyd',
+        'default': ['crond', 'dbus', 'networkmanager', 'hostapd', 'dnsmasq', 'unbound', 'chronyd',
                     'travelrouter-bootstrap', 'travelrouter'],
         'shutdown': ['mount-ro', 'killprocs', 'savecache'],
     }
@@ -36,6 +36,7 @@ def build(source, target):
             (directory / name).symlink_to('/etc/init.d/' + name)
     for path in (overlay / 'etc/init.d').iterdir():
         path.chmod(0o755)
+    (overlay / 'etc/periodic/15min/travelrouter-logs').chmod(0o755)
     with tarfile.open(target / 'media/travelrouter.apkovl.tar.gz', 'w:gz') as archive:
         for directory in ('etc', 'opt'):
             archive.add(overlay / directory, arcname=directory, filter=root_owner)

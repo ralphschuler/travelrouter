@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+# shellcheck disable=SC2034
+description="TravelRouter protected proxy tunnel"
+command=/usr/bin/sing-box
+command_args="run -c /etc/travelrouter/proxy.json"
+command_background=yes
+pidfile=/run/travelrouter/proxy.pid
+output_log=/var/log/travelrouter-proxy.log
+error_log=/var/log/travelrouter-proxy.log
+
+depend() {
+    need travelrouter-bootstrap networkmanager
+}

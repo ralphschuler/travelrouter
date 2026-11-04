@@ -2,3 +2,4 @@ bandit==1.9.4
 coverage==7.17.1
 pip-audit==2.10.1
 ruff==0.17.3
+cryptography>=46.0.0

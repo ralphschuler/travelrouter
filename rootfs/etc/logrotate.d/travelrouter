@@ -1,0 +1,7 @@
+/var/log/travelrouter*.log {
+    size 256k
+    rotate 2
+    missingok
+    notifempty
+    copytruncate
+}

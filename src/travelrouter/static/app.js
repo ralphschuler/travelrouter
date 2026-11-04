@@ -111,6 +111,29 @@ byId('logout').addEventListener('click', event => busy(event.target, async () =>
   await api('logout', {}); csrf = ''; show('panel', false); show('setup', false); show('login', true);
 }));
 
+byId('dns-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    await api('dns', {mode: event.target.elements.mode.value});
+    message('DNS mode saved. The local resolver is being updated.');
+    await status();
+  });
+});
+
+byId('privacy-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const data = Object.fromEntries(new FormData(event.target));
+    data.port = Number(data.port);
+    data.acknowledge_plaintext = event.target.elements.acknowledge_plaintext.checked;
+    await api('privacy', data);
+    event.target.elements.config.value = '';
+    event.target.elements.password.value = '';
+    message('Privacy route saved. Checking the protected connection.');
+    await status();
+  });
+});
+
 async function status() {
   const info = await api('status');
   byId('state').textContent = ({online: 'Internet connected', captive: 'Public Wi-Fi sign-in required', offline: 'Offline · setup available'})[info.state];
@@ -126,8 +149,15 @@ async function status() {
     byId('details').append(key, text);
   }
   byId('hardware').textContent = info.hardware_note || info.last_error || '';
-  byId('settings-form').elements.ssid.value = info.ssid || '';
-  byId('settings-form').elements.country.value = info.country === '00' ? '' : info.country || '';
+  byId('privacy-status').textContent = info.privacy_mode === 'direct'
+    ? 'Direct mode: the firewall is active; no VPN or proxy protects your connection.'
+    : info.privacy_mode + ': kill-switch enabled. ' + (info.tunnel_ready && info.state === 'online' ? 'Protected connection verified.' : 'Waiting for a verified tunnel; direct client access is blocked.');
+  if (!byId('panel').contains(document.activeElement)) {
+    byId('settings-form').elements.ssid.value = info.ssid || '';
+    byId('settings-form').elements.country.value = info.country === '00' ? '' : info.country || '';
+    byId('dns-form').elements.mode.value = info.dns_mode || 'dot';
+    byId('privacy-form').elements.mode.value = info.privacy_mode || 'direct';
+  }
 }
 
 api('session').then(signedIn).catch(() => {});
