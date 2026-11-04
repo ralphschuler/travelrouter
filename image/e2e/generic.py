@@ -179,7 +179,7 @@ def runtime(args, architecture, raw, report):
             console.command('sync', timeout=30)
             report.setdefault('runtime_passed', []).append(phase)
         finally:
-            console.diagnostics(output)
+            console.diagnostics(output, failed=phase not in report.get('runtime_passed', []))
             console.close()
 
 

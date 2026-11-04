@@ -182,11 +182,13 @@ class Console:
         destination = shlex.quote(f'{directory}/{path.name}')
         self.command(f"base64 -d > {destination} <<'{delimiter}'\n{lines}\n{delimiter}", timeout=30)
 
-    def diagnostics(self, output):
+    def diagnostics(self, output, failed=False):
         if not self.ready or self.process.poll() is not None:
             return
         commands = {
             'services.txt': 'rc-status -a',
+            'processes.txt': 'ps -ef; ls -l /run/unbound* /run/travelrouter/',
+            'service-definitions.txt': 'cat /etc/init.d/unbound /etc/conf.d/unbound /etc/init.d/travelrouter',
             'interfaces.txt': 'ip -details address; ip route; iw dev',
             'listeners.txt': 'ss -lntup',
             'firewall.txt': 'nft list ruleset',
@@ -195,6 +197,14 @@ class Console:
             'client-wifi.log': f'tail -n 150 {REMOTE}/client-wpa.log',
             'kernel.log': 'dmesg | tail -n 100',
         }
+        if failed:
+            # Diagnostic only after a failed gate, never a service repair or a
+            # substitute for normal OpenRC startup. Double -d keeps fatal startup
+            # messages on stderr; -p avoids changing the service's PID file.
+            commands['unbound-foreground.log'] = (
+                'if ! rc-service unbound status >/dev/null 2>&1; then '
+                'timeout 5 /usr/sbin/unbound -dd -p -vv -c /etc/unbound/unbound.conf; fi')
+            commands['listeners-after-diagnostics.txt'] = 'ss -lntup; ps -ef'
         for name, command in commands.items():
             try:
                 result = self.command(command, timeout=10, check=False)
@@ -304,7 +314,7 @@ def run(args, report):
             # QEMU termination is a cold restart. The application must have fsynced
             # its overlay; no source image mutation or special reboot fixture is used.
         finally:
-            console.diagnostics(output)
+            console.diagnostics(output, failed=phase not in report.get('passed', []))
             console.close()
     report.update(result='passed', stage='complete')
 
