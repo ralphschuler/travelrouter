@@ -121,6 +121,41 @@ byId('scan').addEventListener('click', event => busy(event.target, async () => {
   if (!result.networks.length) message('No networks found. Check the upstream Wi-Fi adapter and try again.');
 }));
 
+async function refreshUsbNetworks() {
+  const result = await api('usb-networks');
+  const container = byId('usb-devices');
+  container.replaceChildren();
+  if (!result.devices.length) {
+    const empty = document.createElement('p'); empty.className = 'empty-state';
+    empty.textContent = 'No USB network detected. Check the cable, phone settings and Trust prompt.';
+    container.append(empty); return;
+  }
+  for (const item of result.devices) {
+    const row = document.createElement('div'); row.className = 'network';
+    const label = document.createElement('span'); label.textContent = item.kind + ' · ' + item.interface;
+    const detail = document.createElement('small');
+    detail.textContent = item.interface === result.active ? 'Active upstream' : 'Link: ' + item.state;
+    label.append(detail); row.append(label);
+    for (const action of ['connect', 'disconnect']) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'quiet';
+      button.textContent = action === 'connect' ? 'Connect' : 'Disconnect';
+      button.addEventListener('click', () => busy(button, async () => {
+        await api('usb-networks', {action, interface: item.interface});
+        message(action === 'connect' ? 'USB network requested. Checking the Internet connection…' : 'USB network disconnected.');
+        await refreshUsbNetworks();
+      }));
+      row.append(button);
+    }
+    container.append(row);
+  }
+}
+byId('usb-refresh').addEventListener('click', event => busy(event.target, refreshUsbNetworks));
+byId('iphone-pair').addEventListener('click', event => busy(event.target, async () => {
+  await api('usb-networks', {action: 'pair-iphone'});
+  message('iPhone pairing requested. Accept the Trust prompt on the phone.');
+  await refreshUsbNetworks();
+}));
+
 byId('connect-form').addEventListener('submit', event => {
   event.preventDefault();
   busy(event.submitter, async () => {

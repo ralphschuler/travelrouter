@@ -134,6 +134,8 @@ def make_server(address, store, backend):
                     self.send(200, snapshot(interfaces))
                 elif path == '/api/logs':
                     self.send(200, logs())
+                elif path == '/api/usb-networks':
+                    self.send(200, backend.usb_networks())
                 else:
                     self.send(404, {'error': 'Unknown endpoint'})
 
@@ -220,6 +222,9 @@ def make_server(address, store, backend):
                 self.send(200, {'reconnect': True, 'ssid': ssid})
             elif path == '/api/scan':
                 self.send(200, {'networks': backend.scan()})
+            elif path == '/api/usb-networks':
+                backend.usb_network_action(data)
+                self.send(200, {'saved': True})
             elif path == '/api/dns':
                 backend.save_dns(data.get('mode'))
                 self.send(200, {'saved': True})

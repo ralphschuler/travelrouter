@@ -16,6 +16,7 @@ class LocalBackend:
         self.lock = threading.RLock()
         self.connected = False
         self.developer_settings = None
+        self.usb_action = None
 
     def status(self):
         return {'state': 'offline', 'setup_complete': self.store.load()['setup_complete']}
@@ -25,6 +26,12 @@ class LocalBackend:
 
     def save_developer(self, data):
         self.developer_settings = data
+
+    def usb_networks(self):
+        return {'devices': [], 'active': None}
+
+    def usb_network_action(self, data):
+        self.usb_action = data
 
     def connect(self, **kwargs):
         self.connected = True
@@ -78,6 +85,21 @@ class WebTests(unittest.TestCase):
         status, _, _ = self.request('/api/connect', {'ssid': 'Hotel', 'password': 'test12345'})
         self.assertEqual(status, 401)
         self.assertFalse(self.backend.connected)
+
+    def test_usb_network_selection_requires_authenticated_setup_and_csrf(self):
+        data = {'action': 'connect', 'interface': 'usb0'}
+        self.assertEqual(self.request('/api/usb-networks')[0], 401)
+        self.assertEqual(self.request('/api/usb-networks', data)[0], 401)
+        self.login()
+        self.assertEqual(self.request('/api/usb-networks', data)[0], 409)
+        config = self.store.load()
+        config['setup_complete'] = True
+        self.store.save(config)
+        self.assertEqual(self.request('/api/usb-networks', data, {'X-CSRF-Token': 'wrong'})[0], 403)
+        self.assertIsNone(self.backend.usb_action)
+        self.assertEqual(self.request('/api/usb-networks')[0], 200)
+        self.assertEqual(self.request('/api/usb-networks', data)[0], 200)
+        self.assertEqual(self.backend.usb_action, data)
 
     def test_hostile_host_and_cross_origin_are_rejected(self):
         self.assertEqual(self.request('/api/status', headers={'Host': 'evil.example'})[0], 403)
