@@ -209,6 +209,8 @@ class Console:
             'unbound.log': 'tail -n 250 /var/log/travelrouter-dns.log',
             'openrc-sysinit.log': f'cat {REMOTE}/openrc-sysinit.log',
             'client-wifi.log': f'tail -n 150 {REMOTE}/client-wpa.log',
+            'client-wifi-status.json': f'cat {REMOTE}/wifi-status.json',
+            'client-dhcp.log': f'tail -n 150 {REMOTE}/client-dhcp.log',
             'kernel.log': 'dmesg | tail -n 100',
         }
         if failed:
@@ -320,6 +322,7 @@ def run(args, report):
             console.upload(HERE / 'client.py')
             console.upload(HERE / 'firewall.py')
             console.upload(HERE / 'lifecycle.py')
+            console.upload(HERE / 'wifi.py')
             report['stage'] = phase + ': OpenRC, WPA2 and DHCP'
             console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
             # Verify the synthetic external server is really alive before testing denial.

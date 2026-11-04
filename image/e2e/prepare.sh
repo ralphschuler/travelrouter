@@ -85,9 +85,19 @@ if config['ap_password'] != expected_wifi:
     raise RuntimeError('Wi-Fi credential did not match the expected boot phase')
 psk = hashlib.pbkdf2_hmac('sha1', expected_wifi.encode(), ssid, 4096, 32).hex()
 path = Path('/root/ci-image-test/client-wpa.conf')
-path.write_text('network={\nssid=' + ssid.hex() + '\npsk=' + psk + '\n}\n')
+control = Path('/root/ci-image-test/wpa-control')
+control.mkdir(mode=0o700)
+Path('/root/ci-image-test/expected-ssid').write_text(ssid.decode())
+path.write_text('ctrl_interface=' + str(control) + '\nnetwork={\nssid=' + ssid.hex() + '\npsk=' + psk + '\n}\n')
 path.chmod(0o600)
 PY
-ip netns exec tr-client wpa_supplicant -B -i wlan2 -c /root/ci-image-test/client-wpa.conf -f /root/ci-image-test/client-wpa.log
-ip netns exec tr-client udhcpc -i wlan2 -q -n -t 12 -T 2 -s /root/ci-image-test/udhcpc.sh
+ip netns exec tr-client ip link set wlan2 up
+timeout -k 5 15 ip netns exec tr-client wpa_supplicant -B -i wlan2 -c /root/ci-image-test/client-wpa.conf -f /root/ci-image-test/client-wpa.log
+timeout -k 5 55 ip netns exec tr-client python3 /root/ci-image-test/wifi.py
+if ! timeout -k 5 40 ip netns exec tr-client udhcpc -i wlan2 -q -n -t 12 -T 2 -s /root/ci-image-test/udhcpc.sh > /root/ci-image-test/client-dhcp.log 2>&1; then
+    cat /root/ci-image-test/client-dhcp.log
+    echo 'Client DHCP failed or exceeded its bounded timeout'
+    exit 1
+fi
+cat /root/ci-image-test/client-dhcp.log
 test -s /root/ci-image-test/client-address

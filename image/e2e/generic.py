@@ -206,7 +206,7 @@ def runtime(args, architecture, raw, report):
             report['stage'] = phase + ': installed runtime UEFI boot'
             print(report['stage'], flush=True)
             console.boot()
-            for fixture in ('prepare.sh', 'client.py', 'firewall.py', 'lifecycle.py'):
+            for fixture in ('prepare.sh', 'client.py', 'firewall.py', 'lifecycle.py', 'wifi.py'):
                 console.upload(HERE / fixture)
             report['stage'] = phase + ': real OpenRC, WPA2 and DHCP'
             console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
