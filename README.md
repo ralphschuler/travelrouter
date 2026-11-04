@@ -3,7 +3,7 @@
 [Project website](https://nyphon.de/travelrouter/) · [Documentation](https://nyphon.de/travelrouter/getting-started.html) · [Releases](https://github.com/ralphschuler/travelrouter/releases)
 
 An offline-first, privacy-focused Alpine Linux travel router for Raspberry Pi
-Compute Module 5. Boot it without Ethernet, join its protected hotspot, replace
+Compute Module 5 and generic AMD64/ARM64 UEFI systems. Boot it without Ethernet, join its protected hotspot, replace
 the factory credentials, and choose an upstream Wi-Fi network in the local panel.
 
 **Experimental software. Physical CM5 qualification is tracked in
@@ -12,6 +12,11 @@ not a substitute for testing a specific carrier board, Wi-Fi adapter, VPN provid
 or public captive network.
 
 ## Download and first boot
+
+Choose the [build target and installation method](docs/build-targets.md) for your
+hardware. Generic UEFI targets provide a directly flashable disk image and a
+separate installer ISO. They require an AP-capable Wi-Fi radio. The CM5 steps
+below use its dedicated board image.
 
 Download the image and `SHA256SUMS` from [GitHub Releases](https://github.com/ralphschuler/travelrouter/releases).
 The release includes a compressed `.img.gz`, package inventory, CycloneDX SBOM,
@@ -84,7 +89,7 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
 See [operations and recovery](docs/operations.md), [security policy](SECURITY.md),
-[design](docs/design.md), [image boot tests](docs/image-testing.md), and
+[design](docs/design.md), [build targets](docs/build-targets.md), [image boot tests](docs/image-testing.md), and
 [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License

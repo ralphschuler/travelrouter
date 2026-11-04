@@ -25,6 +25,25 @@ CONTEXT = b'TravelRouter application update v1\x00'
 MIRROR = 'https://dl-cdn.alpinelinux.org/alpine/v3.24'
 
 
+def package_architecture():
+    architecture = command(['/sbin/apk', '--print-arch']).strip()
+    if architecture not in {'aarch64', 'x86_64'}:
+        raise ValueError('Package updates are unavailable for this architecture')
+    return architecture
+
+
+def repository_location(url, architecture):
+    if architecture not in {'aarch64', 'x86_64'}:
+        raise ValueError('Unsupported package architecture')
+    for repository in ('main', 'community'):
+        prefix = f'{MIRROR}/{repository}/{architecture}/'
+        if url.startswith(prefix):
+            name = url[len(prefix):]
+            if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9+_.~-]*\.apk', name):
+                return repository, name
+    raise ValueError('Unexpected package source or architecture')
+
+
 def version_tuple(value):
     if not isinstance(value, str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value):
         raise ValueError('A semantic release version is required')
@@ -160,6 +179,7 @@ class Updates:
         # The live RAM root stays unchanged. Signed packages activate on reboot.
         from .system import boot_medium
         with self.backend.lock:
+            architecture = package_architecture()
             available = command(['/sbin/apk', '--no-cache', '--repositories-file', '/dev/null',
                                  '--repository', MIRROR + '/main', '--repository', MIRROR + '/community',
                                  'list', '--upgradable'], timeout=60).strip()
@@ -170,8 +190,9 @@ class Updates:
             if shutil.disk_usage(medium).free < 1024 * 1024 * 1024:
                 raise ValueError('At least 1 GiB free boot space is required for package staging')
             command(['/bin/mount', '-o', 'remount,rw', str(medium)])
-            staging = Path(tempfile.mkdtemp(prefix='.packages-', dir=medium))
+            staging = None
             try:
+                staging = Path(tempfile.mkdtemp(prefix='.packages-', dir=medium))
                 cache = staging / 'downloads'
                 cache.mkdir()
                 packages = Path('/etc/apk/world').read_text().split()
@@ -182,22 +203,18 @@ class Updates:
                 urls = command([*args, 'fetch', '--recursive', '--url', *packages], timeout=60).splitlines()
                 repositories = staging / 'repositories'
                 for repository in ('main', 'community'):
-                    directory = repositories / repository / 'aarch64'
+                    directory = repositories / repository / architecture
                     directory.mkdir(parents=True)
-                    url = MIRROR + '/' + repository + '/aarch64/APKINDEX.tar.gz'
+                    url = f'{MIRROR}/{repository}/{architecture}/APKINDEX.tar.gz'
                     with urllib.request.urlopen(url, timeout=20) as response:  # nosec B310
                         data = response.read(8 * 1024 * 1024 + 1)
                     if len(data) > 8 * 1024 * 1024:
                         raise ValueError('Package index is too large')
                     (directory / 'APKINDEX.tar.gz').write_bytes(data)
                 for url in urls:
-                    repository = next((name for name in ('main', 'community')
-                                       if url.startswith(MIRROR + '/' + name + '/aarch64/')), None)
-                    if not repository:
-                        raise ValueError('Unexpected package source')
-                    name = url.rsplit('/', 1)[-1]
-                    os.replace(cache / name, repositories / repository / 'aarch64' / name)
-                downloaded = [str(path) for path in repositories.glob('*/aarch64/*.apk')]
+                    repository, name = repository_location(url, architecture)
+                    os.replace(cache / name, repositories / repository / architecture / name)
+                downloaded = [str(path) for path in repositories.glob(f'*/{architecture}/*.apk')]
                 if not downloaded:
                     raise ValueError('No packages were downloaded')
                 command(['/sbin/apk', 'verify', *downloaded], timeout=120)
@@ -217,10 +234,16 @@ class Updates:
                     shutil.rmtree(previous)
                 os.replace(medium / 'repositories', previous)
                 os.replace(repositories, medium / 'repositories')
+                # Persistence remounts the boot medium read-only, including on failure.
+                # Finish all temporary filesystem cleanup before crossing that boundary.
+                shutil.rmtree(staging)
+                staging = None
                 self.backend.persist()
                 self.status.update(message='Verified Alpine packages staged for next boot. Kernel updates use a full release image.',
                                    reboot_required=True)
             finally:
-                if staging.exists():
-                    shutil.rmtree(staging)
-                command(['/bin/mount', '-o', 'remount,ro', str(medium)])
+                try:
+                    if staging is not None and staging.exists():
+                        shutil.rmtree(staging)
+                finally:
+                    command(['/bin/mount', '-o', 'remount,ro', str(medium)])

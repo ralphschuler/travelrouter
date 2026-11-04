@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "alpine_version": "3.24.3",
+  "alpine_branch": "v3.24",
+  "targets": {
+    "generic-x86_64": {
+      "architecture": "x86_64",
+      "aliases": ["amd64", "x86_64"],
+      "base_url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-standard-3.24.3-x86_64.iso",
+      "base_sha256": "1629ffe7308d4f3d3eeeed3a97d09ad62293f6d37ef3e483a7306077fdac12be",
+      "checksum_url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-standard-3.24.3-x86_64.iso.sha256",
+      "installer_boot_modes": ["BIOS", "UEFI"],
+      "runtime_boot_modes": ["UEFI"],
+      "grub_platform": "x86_64-efi",
+      "efi_filename": "bootx64.efi",
+      "kernel_flavor": "lts"
+    },
+    "generic-aarch64": {
+      "architecture": "aarch64",
+      "aliases": ["arm64", "aarch64"],
+      "base_url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-standard-3.24.3-aarch64.iso",
+      "base_sha256": "d4438d8973b7a4c50a2ee25d1555c537c1e6e91e25db28b7b683aa79c9ddba8f",
+      "checksum_url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-standard-3.24.3-aarch64.iso.sha256",
+      "installer_boot_modes": ["UEFI"],
+      "runtime_boot_modes": ["UEFI"],
+      "grub_platform": "arm64-efi",
+      "efi_filename": "bootaa64.efi",
+      "kernel_flavor": "lts"
+    }
+  }
+}

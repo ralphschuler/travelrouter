@@ -1,0 +1,38 @@
+TravelRouter generic UEFI installer
+==================================
+
+Boot this ISO as a CD/DVD or virtual optical drive. It uses the stock Alpine
+installer environment and its local root console; this console is separate
+from the installed router's locked root account and disabled SSH service.
+The installer ISO is not the router's persistent runtime.
+
+At the Alpine console, log in as root using stock installer console semantics,
+then run the installer from the mounted installation medium, for example:
+
+    sh /media/cdrom/travelrouter/install.sh
+
+Use the actual mount path if the medium is mounted elsewhere. The script finds
+its payload relative to itself. If needed, it installs python3 and lsblk using
+only the signed package repositories on this medium. No Internet is required.
+
+The installer verifies both compressed and expanded image checksums, lists disk
+identities and sizes, and requires the exact confirmation "ERASE /dev/DEVICE".
+It refuses mounted disks, swap disks, partitions, read-only disks, insufficient
+capacity, and any disk underlying the installation media or running system.
+Writing replaces the target's partition table and image region: all existing
+target data must be considered lost. Back up the target before installation.
+There is no unattended or preconfirmed installation option.
+
+After writing, the installer flushes buffers and verifies the exact image region
+by reading it back and comparing the complete SHA256. Do not boot a target after
+an interruption or failed verification; rerun the installation instead.
+
+The installed runtime supports UEFI on its matching x86_64 or aarch64 platform.
+Disable Secure Boot. Legacy BIOS runtime boot is not included in this release,
+even if the upstream installer ISO can itself boot in BIOS mode. After successful
+verification, shut down, remove the ISO/installer media, and boot the target.
+
+The runtime uses a writable FAT boot volume and RAM root with persistent settings
+in its APK overlay. At least one supported Wi-Fi radio is required for the local
+hotspot; a second supported radio provides upstream Wi-Fi. Physical driver and
+board support still require qualification.
