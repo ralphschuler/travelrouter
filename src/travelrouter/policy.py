@@ -32,7 +32,7 @@ def render_dns(ap, state, resolvers):
              'no-resolv', 'no-hosts', 'domain-needed', 'bogus-priv',
              'dhcp-authoritative', 'dhcp-range=10.42.0.50,10.42.0.200,255.255.255.0,12h',
              f'dhcp-option=3,{LAN_IP}', f'dhcp-option=6,{LAN_IP}',
-             'dhcp-leasefile=/run/travelrouter/dnsmasq.leases',
+             'dhcp-leasefile=/var/lib/misc/dnsmasq.leases',
              'address=/router.home.arpa/10.42.0.1', 'local=/home.arpa/',
              'cache-size=500', 'dns-forward-max=150', 'stop-dns-rebind',
              'rebind-localhost-ok', 'dhcp-script=', 'log-facility=-']
@@ -118,7 +118,7 @@ def render_unbound(mode):
     lines = ['server:', '    interface: 127.0.0.1', '    port: 5335',
              '    access-control: 127.0.0.0/8 allow', '    do-ip6: no',
              '    username: unbound', '    chroot: ""', '    directory: /etc/unbound',
-             '    pidfile: /run/unbound/unbound.pid',
+             '    pidfile: /run/unbound.pid',
              '    tls-cert-bundle: /etc/ssl/certs/ca-certificates.crt',
              '    hide-identity: yes', '    hide-version: yes',
              '    qname-minimisation: yes', '    harden-glue: yes',

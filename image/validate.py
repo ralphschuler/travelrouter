@@ -27,6 +27,7 @@ def run(root, binary, *args):
 def validate(root):
     root = Path(root)
     (root / 'run/travelrouter').mkdir(parents=True, exist_ok=True)
+    (root / 'run/unbound').mkdir(parents=True, exist_ok=True)
     (root / 'etc/unbound/travelrouter-blocks.conf').write_text('local-zone: "blocked.example" always_nxdomain\n')
     for entry in (root / 'etc/runlevels').glob('*/*'):
         if not (root / 'etc/init.d' / entry.name).is_file():

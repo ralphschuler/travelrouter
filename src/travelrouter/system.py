@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import pwd
 import shutil
 import subprocess
 import tarfile
@@ -99,6 +100,10 @@ def _overlay_filter(info):
 
 def initialize(store):
     RUN.mkdir(parents=True, exist_ok=True, mode=0o755)
+    unbound_run = Path('/run/unbound')
+    unbound_run.mkdir(parents=True, exist_ok=True)
+    unbound_user = pwd.getpwnam('unbound')
+    os.chown(unbound_run, unbound_user.pw_uid, unbound_user.pw_gid)
     config = store.load()
     radios = []
     for _ in range(20):

@@ -35,7 +35,7 @@ def snapshot(interfaces):
               'load_average': [float(value) for value in Path('/proc/loadavg').read_text().split()[:3]],
               'temperature_c': int(temperature.read_text()) / 1000 if temperature.exists() else None,
               'clients': [], 'dns': {}}
-    leases = Path('/run/travelrouter/dnsmasq.leases')
+    leases = Path('/var/lib/misc/dnsmasq.leases')
     if leases.exists():
         for line in leases.read_text().splitlines():
             fields = line.split()
