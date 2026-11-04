@@ -27,8 +27,8 @@ jobs:
     name: Lint, tests and dependency audit
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
@@ -44,7 +44,7 @@ jobs:
     name: Developer SSH authentication
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -f image/e2e/developer.Dockerfile -t travelrouter-ssh-test .
       - run: >-
           docker run --rm --init --network none -e TRAVELROUTER_TEST_CONTAINER=yes
@@ -54,7 +54,7 @@ jobs:
     name: Secret scanning
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
@@ -73,7 +73,7 @@ jobs:
       matrix:
         language: [python, javascript-typescript, actions]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4
         with:
           languages: ${{ matrix.language }}
@@ -88,7 +88,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/dependency-review-action@907a6e9569212033966bc0b69d32473b046dd66b
         with:
           fail-on-severity: high
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build inside pinned Alpine
         if: inputs.image_release == ''
         run: >-
@@ -129,7 +129,7 @@ jobs:
           sh image/e2e/run.sh dist/travelrouter-cm5-aarch64.img.gz
       - name: Preserve image boot and client diagnostics
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-boot-diagnostics
           path: build/e2e-results/
@@ -146,7 +146,7 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '1'
           ignore-unfixed: false
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: travelrouter-cm5-aarch64
           path: dist/*
@@ -160,8 +160,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 100
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: travelrouter-cm5-aarch64
           path: dist
@@ -176,7 +176,7 @@ jobs:
           --output /source/build/recovery-results --scratch /source/build/recovery-vm --recovery
       - name: Preserve recovery diagnostics
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: recovery-boot-diagnostics
           path: build/recovery-results/
@@ -197,7 +197,7 @@ jobs:
           - target: generic-aarch64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build runtime image and installer ISO
         env:
           BUILD_TARGET: ${{ matrix.target }}
@@ -218,7 +218,7 @@ jobs:
           sh image/e2e/generic.sh "$BUILD_TARGET"
       - name: Preserve UEFI and installer diagnostics
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-boot-diagnostics-${{ matrix.target }}
           path: build/e2e-results-${{ matrix.target }}/
@@ -244,7 +244,7 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '1'
           ignore-unfixed: false
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: travelrouter-${{ matrix.target }}
           path: dist/${{ matrix.target }}/*
@@ -261,8 +261,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: travelrouter-*
           path: dist
@@ -273,7 +273,7 @@ jobs:
           sha256sum -c SHA256SUMS
           sha256sum -c travelrouter-generic-x86_64-SHA256SUMS
           sha256sum -c travelrouter-generic-aarch64-SHA256SUMS
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
       - run: python -m pip install cryptography==50.0.2
@@ -282,7 +282,7 @@ jobs:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: python image/sign_update.py
       - run: python image/release_manifest.py dist
-      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*
       - name: Publish downloadable image
