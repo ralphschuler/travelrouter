@@ -1,5 +1,7 @@
 # TravelRouter
 
+[Project website](https://nyphon.de/travelrouter/) · [Documentation](https://nyphon.de/travelrouter/getting-started.html) · [Releases](https://github.com/ralphschuler/travelrouter/releases)
+
 An offline-first, privacy-focused Alpine Linux travel router for Raspberry Pi
 Compute Module 5. Boot it without Ethernet, join its protected hotspot, replace
 the factory credentials, and choose an upstream Wi-Fi network in the local panel.

@@ -26,8 +26,9 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
-      - run: ruff check src tests image
-      - run: bandit -q -r src image -c pyproject.toml
+      - run: ruff check src tests image site
+      - run: bandit -q -r src image site -c pyproject.toml
+      - run: python site/build.py && python site/check.py
       - run: shellcheck -s sh image/build.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap
       - run: PYTHONPATH=src coverage run --source=src/travelrouter -m unittest discover -s tests -v
       - run: coverage report
