@@ -45,10 +45,10 @@ while IFS= read -r package; do
     case "$package" in ''|'#'*) continue ;; esac
     set -- "$@" "$package"
 done < "$source_dir/image/packages.txt"
+# APK 3 --url still downloads; it omits URLs when the output file already exists.
+# Capture URLs in the same fetch into this fresh directory, never a second pass.
 apk --repositories-file /dev/null --repository "$base/$branch/main" --repository "$base/$branch/community" \
-    fetch --recursive --output "$build_dir/downloads" "$@"
-apk --repositories-file /dev/null --repository "$base/$branch/main" --repository "$base/$branch/community" \
-    fetch --recursive --url "$@" > "$build_dir/package-urls.txt"
+    fetch --recursive --url --output "$build_dir/downloads" "$@" > "$build_dir/package-urls.txt"
 for repository in main community; do
     mkdir -p "$build_dir/media/repositories/$repository/$arch"
     touch "$build_dir/media/repositories/$repository/.boot_repository"
@@ -126,9 +126,7 @@ chmod 755 "$payload/install.sh"
 # is already inside the compressed runtime image. Keep its inventory separate.
 mkdir -p "$build_dir/installer-downloads"
 apk --repositories-file /dev/null --repository "$base/$branch/main" --repository "$base/$branch/community" \
-    fetch --recursive --output "$build_dir/installer-downloads" python3 lsblk
-apk --repositories-file /dev/null --repository "$base/$branch/main" --repository "$base/$branch/community" \
-    fetch --recursive --url python3 lsblk > "$build_dir/installer-package-urls.txt"
+    fetch --recursive --url --output "$build_dir/installer-downloads" python3 lsblk > "$build_dir/installer-package-urls.txt"
 for repository in main community; do
     mkdir -p "$payload/repositories/$repository/$arch"
     cp "$build_dir/media/repositories/$repository/$arch/APKINDEX.tar.gz" \
