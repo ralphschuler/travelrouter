@@ -92,7 +92,7 @@ path.write_text('ctrl_interface=' + str(control) + '\nnetwork={\nssid=' + ssid.h
 path.chmod(0o600)
 PY
 ip netns exec tr-client ip link set wlan2 up
-timeout -k 5 15 ip netns exec tr-client wpa_supplicant -B -i wlan2 -c /root/ci-image-test/client-wpa.conf -f /root/ci-image-test/client-wpa.log
+timeout -k 5 15 ip netns exec tr-client wpa_supplicant -B -s -i wlan2 -c /root/ci-image-test/client-wpa.conf > /root/ci-image-test/client-wpa.log 2>&1
 timeout -k 5 55 ip netns exec tr-client python3 /root/ci-image-test/wifi.py
 if ! timeout -k 5 40 ip netns exec tr-client udhcpc -i wlan2 -q -n -t 12 -T 2 -s /root/ci-image-test/udhcpc.sh > /root/ci-image-test/client-dhcp.log 2>&1; then
     cat /root/ci-image-test/client-dhcp.log
