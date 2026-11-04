@@ -18,14 +18,15 @@ mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
+python3 "$source_dir/image/boot_config.py" cmdline "$media/cmdline.txt"
 
 set --
 while IFS= read -r package; do
     case "$package" in ''|'#'*) continue ;; esac
     set -- "$@" "$package"
 done < "$source_dir/image/packages.txt"
-apk fetch --recursive --output "$build_dir/downloads" "$@"
-apk fetch --recursive --url "$@" > "$build_dir/package-urls.txt"
+# APK 3 --url also downloads and skips existing files; capture both in one pass.
+apk fetch --recursive --url --output "$build_dir/downloads" "$@" > "$build_dir/package-urls.txt"
 for repository in main community; do
     mkdir -p "$media/repositories/$repository/aarch64"
     touch "$media/repositories/$repository/.boot_repository"

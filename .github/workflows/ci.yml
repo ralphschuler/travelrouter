@@ -6,6 +6,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      image_release:
+        description: 'Optional existing release tag to boot-test instead of building an image'
+        required: false
+        type: string
+        default: ''
   schedule:
     - cron: '17 5 * * 1'
 
@@ -13,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: image-matrix-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -29,7 +35,7 @@ jobs:
       - run: ruff check src tests image site
       - run: bandit -q -r src image site -c pyproject.toml
       - run: python site/build.py && python site/check.py
-      - run: shellcheck -s sh image/build.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap
+      - run: shellcheck -s sh image/*.sh image/e2e/*.sh image/targets/*.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap
       - run: PYTHONPATH=src coverage run --source=src/travelrouter -m unittest discover -s tests -v
       - run: coverage report
       - run: pip-audit -r requirements-dev.txt
@@ -80,17 +86,47 @@ jobs:
   image:
     name: Build and validate offline CM5 image
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Build inside pinned Alpine
+        if: inputs.image_release == ''
         run: >-
           docker run --rm --cap-add NET_ADMIN
           -e GITHUB_SHA -e GITHUB_REF_NAME
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
           sh image/build.sh
+      - name: Download the published image selected for diagnosis
+        if: github.event_name == 'workflow_dispatch' && inputs.image_release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_RELEASE: ${{ inputs.image_release }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/* ]] || exit 1
+          [[ "$IMAGE_RELEASE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          mkdir -p dist
+          gh release download "$IMAGE_RELEASE" --repo "$GITHUB_REPOSITORY" --dir dist \
+            --pattern travelrouter-cm5-aarch64.img.gz --pattern SHA256SUMS
+          cd dist
+          sha256sum --check --ignore-missing SHA256SUMS
+      - name: Boot the built image and exercise a wireless client
+        timeout-minutes: 35
+        run: >-
+          docker run --rm
+          -v "$PWD:/source" -w /source
+          alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+          sh image/e2e/run.sh dist/travelrouter-cm5-aarch64.img.gz
+      - name: Preserve image boot and client diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: image-boot-diagnostics
+          path: build/e2e-results/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Scan installed image packages
+        if: inputs.image_release == ''
         uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
         with:
           version: v0.76.1
@@ -107,10 +143,78 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  generic-image:
+    name: Build and boot ${{ matrix.target }}
+    if: inputs.image_release == ''
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: generic-x86_64
+            runner: ubuntu-24.04
+          - target: generic-aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Build runtime image and installer ISO
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: >-
+          docker run --rm --cap-add NET_ADMIN
+          -e GITHUB_SHA -e GITHUB_REF_NAME
+          -v "$PWD:/source" -w /source
+          alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+          sh image/build-generic.sh "$BUILD_TARGET"
+      - name: Boot UEFI installer and validate installed runtime
+        timeout-minutes: 35
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: >-
+          docker run --rm
+          -v "$PWD:/source" -w /source
+          alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+          sh image/e2e/generic.sh "$BUILD_TARGET"
+      - name: Preserve UEFI and installer diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: image-boot-diagnostics-${{ matrix.target }}
+          path: build/e2e-results-${{ matrix.target }}/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Scan installed target packages
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        with:
+          version: v0.76.1
+          scan-type: rootfs
+          scan-ref: build/${{ matrix.target }}/check
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+      - name: Scan the offline installer environment
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
+        with:
+          version: v0.76.1
+          scan-type: rootfs
+          scan-ref: build/${{ matrix.target }}/installer-check
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: travelrouter-${{ matrix.target }}
+          path: dist/${{ matrix.target }}/*
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish attested experimental release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [quality, secrets, codeql, image]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, secrets, codeql, image, generic-image]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -120,9 +224,15 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: travelrouter-cm5-aarch64
+          pattern: travelrouter-*
           path: dist
-      - run: cd dist && sha256sum -c SHA256SUMS
+          merge-multiple: true
+      - name: Verify every platform artifact
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS
+          sha256sum -c travelrouter-generic-x86_64-SHA256SUMS
+          sha256sum -c travelrouter-generic-aarch64-SHA256SUMS
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
@@ -131,7 +241,7 @@ jobs:
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: python image/sign_update.py
-      - run: cd dist && sha256sum travelrouter-cm5-aarch64.img.gz travelrouter-update.tru packages.txt sbom.cdx.json build-metadata.json > SHA256SUMS
+      - run: python image/release_manifest.py dist
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: dist/*
@@ -139,4 +249,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --prerelease --title "$RELEASE_TAG — Experimental CM5 image" --notes-file docs/release-notes.md
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --prerelease --title "$RELEASE_TAG — Experimental router images" --notes-file docs/release-notes.md

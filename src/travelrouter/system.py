@@ -99,6 +99,10 @@ def _overlay_filter(info):
 
 
 def initialize(store):
+    # Local DNS binds before NetworkManager finishes its asynchronous startup.
+    # Establish the loopback address explicitly rather than depend on that race.
+    command(['/sbin/ip', 'address', 'replace', '127.0.0.1/8', 'dev', 'lo'])
+    command(['/sbin/ip', 'link', 'set', 'lo', 'up'])
     RUN.mkdir(parents=True, exist_ok=True, mode=0o755)
     unbound_run = Path('/run/unbound')
     unbound_run.mkdir(parents=True, exist_ok=True)
@@ -336,10 +340,11 @@ class System:
         if dns_mode != self.last_dns_mode or zones_changed:
             atomic_write(zones_path, zones, 0o644)
             atomic_write('/etc/unbound/unbound.conf', render_unbound(dns_mode), 0o644)
-            command(['/sbin/rc-service', 'unbound', 'restart'])
+            command(['/sbin/rc-service', '--nodeps', 'unbound', 'restart'])
             self.last_dns_mode = dns_mode
         atomic_write('/etc/dnsmasq.conf', render_dns(self.ap, effective, resolvers), 0o644)
-        command(['/sbin/rc-service', 'dnsmasq', 'restart'])
+        # These are our boot dependencies; a normal OpenRC restart would stop us.
+        command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
         self.last_policy = key
         self.state, self.wan = effective, wan
 
@@ -368,7 +373,7 @@ class System:
                     if self.pending_restart and time.monotonic() >= self.pending_restart:
                         config = self.store.load()
                         atomic_write('/etc/hostapd/hostapd.conf', hostapd_config(self.ap, config))
-                        command(['/sbin/rc-service', 'hostapd', 'restart'])
+                        command(['/sbin/rc-service', '--nodeps', 'hostapd', 'restart'])
                         self.pending_restart = 0
                     self.last_error = None
                 if state == 'online' and (self.filtering.last_update == 0 or time.monotonic() - self.filtering.last_update > 86400):

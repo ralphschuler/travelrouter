@@ -11,6 +11,11 @@ Python, UI, configuration templates, and build scripts, not to third-party code.
 - Linux, hostapd, dnsmasq, NetworkManager, WireGuard tooling and sing-box retain
   their respective copyleft licenses. Unbound, Python, cryptography and other
   dependencies retain their own licenses. Firmware has component-specific terms.
+- Generic UEFI images include a generated [GNU GRUB](https://www.gnu.org/software/grub/)
+  EFI bootloader under GPL-3.0-or-later. Its builder package versions, tool version
+  and generated EFI SHA-256 are recorded separately in each target's build metadata.
+  Corresponding upstream source is available from the [GNU GRUB source archive](https://ftp.gnu.org/gnu/grub/);
+  Alpine's build recipe and patches are in [aports/main/grub](https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/grub).
 - [sing-box](https://github.com/SagerNet/sing-box) is an independently developed
   proxy platform distributed by Alpine. TravelRouter is not affiliated with it.
 - IBM Plex Sans is bundled locally under the SIL Open Font License 1.1. The

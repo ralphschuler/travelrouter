@@ -1,11 +1,15 @@
 # CM5 hardware qualification
 
-Status: **pending physical test**. The operator temporarily disconnected the CM5
-to charge the laptop. No custom TravelRouter image has been written to it yet.
+Status: **qualification incomplete**. The v0.1.0 image was written to a CM5
+Rev 1.0 with 64 GB eMMC on 2026-11-04 and passed the imaging tool's read-back
+verification. A physical client can join its hotspot and receives a
+`10.42.0.x` lease, but Safari cannot reach `http://10.42.0.1/`. That failure is
+under investigation; the image is not yet qualified for travel use.
 
 - [ ] Record CM5 RAM/eMMC variant, carrier board, `lsusb`, both Wi-Fi drivers.
-- [ ] Boot without Ethernet or upstream and observe `TravelRouter-XXXX`.
-- [ ] Obtain a DHCP lease, open captive portal, verify first-setup gate.
+- [x] Boot without Ethernet or upstream and observe the TravelRouter hotspot.
+- [x] Join the hotspot and obtain a `10.42.0.x` DHCP lease.
+- [ ] Open the operations panel/captive portal and verify the first-setup gate.
 - [ ] Replace both credentials; rejoin AP and log in.
 - [ ] Scan/join/save upstream; verify Internet checks, DHCP and DNS.
 - [ ] Reboot; confirm saved upstream and administrator/AP settings survive.
@@ -18,5 +22,6 @@ to charge the laptop. No custom TravelRouter image has been written to it yet.
 - [ ] Stage package/app update and reboot; verify rollback/recovery.
 - [ ] Review dashboard counters and confirm logs contain no credentials/history.
 
-CI provides offline package and configuration checks. It cannot prove these
-physical/network-specific outcomes.
+CI includes offline package/configuration checks and an
+[image boot and client test](image-testing.md). Emulation cannot prove the
+physical/network-specific outcomes in this checklist.

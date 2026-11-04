@@ -4,7 +4,7 @@ Report vulnerabilities using [GitHub private vulnerability reporting](https://gi
 Do not put passwords, exported backups, WireGuard private keys, proxy credentials,
 personal DNS histories, or full public-network captures in an issue.
 
-This initial release is experimental. Only the current release is maintained.
+Releases are experimental. Only the current release is maintained.
 Image and CI qualification do not imply a completed physical hardware or provider
 test. Review the open hardware acceptance checklist before using it during travel.
 
@@ -31,6 +31,10 @@ test. Review the open hardware acceptance checklist before using it during trave
   Physical possession of the boot medium can expose them. Exported full backups
   are encrypted and authenticated with a user-supplied password.
 - No remote SSH service or UPnP port mapping is enabled.
+- Generic installer ISOs use stock Alpine's local root console. It is separate
+  from the installed router's locked root account and is intended for local disk
+  installation. The installer requires explicit disk selection and confirmation;
+  it does not run the operations panel or persist router configuration to the ISO.
 
 ## Updates
 

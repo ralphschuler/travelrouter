@@ -40,9 +40,10 @@ def validate(root):
     for entry in (root / 'etc/runlevels').glob('*/*'):
         if not (root / 'etc/init.d' / entry.name).is_file():
             raise RuntimeError(f'Missing OpenRC service: {entry.name}')
-    for name in ('nmcli', 'hostapd', 'dnsmasq', 'nft', 'unbound-checkconf', 'rfkill', 'ip', 'curl', 'python3'):
+    for name in ('nmcli', 'hostapd', 'dnsmasq', 'nft', 'unbound-checkconf', 'rfkill', 'ip', 'curl', 'python3', 'openssl'):
         print('Checking installed executable:', executable(root, name), flush=True)
     run(root, 'python3', '--version')
+    run(root, 'openssl', 'version')
     for mode in ('dot', 'recursive'):
         (root / 'etc/unbound/unbound.conf').write_text(render_unbound(mode))
         run(root, 'unbound-checkconf', '/etc/unbound/unbound.conf')

@@ -9,7 +9,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-def generate(root, out, bundle_sha):
+def generate(root, out, bundle_sha, architecture='aarch64', target='cm5'):
+    targets = {'cm5': 'aarch64', 'generic-x86_64': 'x86_64', 'generic-aarch64': 'aarch64'}
+    if targets.get(target) != architecture:
+        raise ValueError('Image target and architecture do not match')
     root, out = Path(root), Path(out)
     database = root / 'lib/apk/db/installed'
     components = []
@@ -19,7 +22,10 @@ def generate(root, out, bundle_sha):
         if 'P' not in fields or 'V' not in fields:
             continue
         name, version = fields['P'], fields['V']
-        purl = f'pkg:apk/alpine/{quote(name)}@{quote(version)}?arch=aarch64&distro=alpine-3.24.3'
+        package_architecture = fields.get('A', architecture)
+        if package_architecture not in {architecture, 'noarch'}:
+            raise ValueError('Installed package architecture does not match the image')
+        purl = f'pkg:apk/alpine/{quote(name)}@{quote(version)}?arch={package_architecture}&distro=alpine-3.24.3'
         components.append({'type': 'library', 'name': name, 'version': version,
                            'purl': purl, 'bom-ref': purl})
     if not components:
@@ -32,10 +38,11 @@ def generate(root, out, bundle_sha):
     hashes = {}
     for package in sorted((root.parent / 'downloads').glob('*.apk')):
         hashes[package.name] = hashlib.sha256(package.read_bytes()).hexdigest()
-    metadata = {'alpine': '3.24.3', 'architecture': 'aarch64', 'boot_bundle_sha256': bundle_sha,
+    qualification = 'physical CM5 validation required' if target == 'cm5' else 'UEFI hardware validation required'
+    metadata = {'alpine': '3.24.3', 'architecture': architecture, 'target': target, 'boot_bundle_sha256': bundle_sha,
                 'source_commit': os.environ.get('GITHUB_SHA', 'local'),
                 'built_at': datetime.now(UTC).isoformat(),
-                'qualification': 'experimental: physical CM5 validation required',
+                'qualification': 'experimental: ' + qualification,
                 'package_sha256': hashes}
     (out / 'build-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
 
