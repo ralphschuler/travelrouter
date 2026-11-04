@@ -1,9 +1,12 @@
 # TravelRouter design
 
-TravelRouter is a public, English-only Alpine Linux appliance for a CM5 travel
-router. A diskless APK overlay and a local signed package repository make the
-first boot independent of Ethernet or Internet access. The official Raspberry
-Pi aarch64 boot bundle supplies the board firmware, kernel and module loop.
+TravelRouter is a public, English-only Alpine Linux appliance for CM5 and generic
+AMD64/ARM64 UEFI travel routers. A diskless APK overlay and a local signed package
+repository make first boot independent of Ethernet or Internet access. The
+dedicated CM5 target uses the official Raspberry Pi boot bundle. Generic targets
+use the matching standard Alpine kernel/module bundle and a GRUB UEFI loader.
+See [platforms and installation media](build-targets.md) for firmware boundaries
+and the separate offline installer ISO.
 
 ## Boot and setup
 
@@ -21,7 +24,7 @@ Physical access can expose saved network credentials.
 Two Wi-Fi adapters are the supported routing configuration. The integrated
 radio hosts the AP when identifiable, and a second radio joins upstream Wi-Fi.
 All available Alpine Linux firmware is bundled. Kernel modules and driver
-support remain bounded by Alpine's Raspberry Pi kernel; unsupported vendor
+support remain bounded by the selected Alpine kernel; unsupported vendor
 drivers are reported rather than silently installed. A single radio always
 offers setup but requires another adapter for upstream Wi-Fi in this version.
 
