@@ -13,9 +13,10 @@ import threading
 import time
 from pathlib import Path
 
+from .backup import seal, unseal, validate_payload
 from .config import atomic_write
 from .filtering import Filtering, validate_settings
-from .network import Network, command
+from .network import Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
 from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
@@ -191,6 +192,59 @@ class System:
         self.persist()
         self.filter_revision += 1
 
+    def backup(self, password):
+        config = self.store.load()
+        for key in ('ap_interface', 'wan_interface'):
+            config.pop(key, None)
+        wireguard = Path('/etc/wireguard/trvpn0.conf')
+        proxy = Path('/etc/travelrouter/proxy-source.json')
+        payload = {'version': 1, 'config': config, 'networks': self.network.export_profiles(),
+                   'wireguard': wireguard.read_text() if wireguard.exists() else None,
+                   'proxy': json.loads(proxy.read_text()) if proxy.exists() else None}
+        return seal(payload, password)
+
+    def restore(self, envelope, password):
+        payload = validate_payload(unseal(envelope, password))
+        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False))
+        self.privacy.stop()
+        old_config = self.store.load()
+        paths = list(self.network.profiles.glob('travelrouter-*.nmconnection'))
+        paths += [Path('/etc/wireguard/trvpn0.conf'), Path('/etc/travelrouter/proxy-source.json'),
+                  Path('/etc/travelrouter/proxy.json')]
+        previous = {path: path.read_text() if path.exists() else None for path in paths}
+        created = []
+        try:
+            for record in payload.get('networks', []):
+                path, _ = write_profile(self.network.profiles, record['ssid'],
+                                         record.get('password', ''), record.get('allow_open', False))
+                content = path.read_text().replace('autoconnect=false', 'autoconnect=true')
+                content = content.replace('autoconnect-priority=10',
+                                          'autoconnect-priority=' + str(record.get('priority', 10)))
+                atomic_write(path, content)
+                created.append(path)
+            for path in paths:
+                path.unlink(missing_ok=True)
+            if payload.get('wireguard'):
+                atomic_write('/etc/wireguard/trvpn0.conf', payload['wireguard'])
+            if payload.get('proxy'):
+                atomic_write('/etc/travelrouter/proxy-source.json', json.dumps(payload['proxy']))
+            config = payload['config']
+            config.update(ap_interface=self.ap, wan_interface=self.network.wan)
+            self.save_config(config)
+            self.network.nm('connection', 'reload')
+        except Exception:
+            for path in created:
+                path.unlink(missing_ok=True)
+            for path, text in previous.items():
+                if text is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    atomic_write(path, text)
+            self.store.save(old_config)
+            raise
+        self.last_policy = None
+        self.filter_revision += 1
+
     def configure_privacy(self, data):
         # Drop forwarding before touching route tables or tunnel processes.
         command(['/sbin/nft', '-f', '-'],
@@ -256,6 +310,8 @@ class System:
     def apply(self, state, wan):
         config = self.store.load()
         effective = state if config['setup_complete'] else 'offline'
+        if self.filtering.status()['missing_countries']:
+            effective = 'offline'
         resolvers = self.network.resolvers(wan) if effective == 'captive' and wan else []
         dns_mode = config.get('dns_mode', 'dot')
         key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode,
@@ -306,7 +362,7 @@ class System:
                         command(['/sbin/rc-service', 'hostapd', 'restart'])
                         self.pending_restart = 0
                     self.last_error = None
-                if self.state == 'online' and time.monotonic() - self.filtering.last_update > 86400:
+                if state == 'online' and time.monotonic() - self.filtering.last_update > 86400:
                     try:
                         # Downloading lists may take time; leave the panel responsive.
                         self.filtering.refresh()

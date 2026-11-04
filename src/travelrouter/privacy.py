@@ -162,5 +162,13 @@ class Privacy:
         if self.mode == 'wireguard':
             command(['/usr/bin/wg-quick', 'up', VPN_INTERFACE], timeout=30)
         elif self.mode == 'proxy':
+            source = json.loads((self.directory / 'proxy-source.json').read_text())
+            routes = json.loads(command(['/sbin/ip', '-j', '-4', 'route', 'show', 'default']))
+            wan = next((route['dev'] for route in routes if route.get('dev') not in
+                        {VPN_INTERFACE, PROXY_INTERFACE} and route.get('dev')), None)
+            if not wan:
+                raise RuntimeError('No upstream route for the proxy')
+            address = socket.getaddrinfo(source['server'], source['port'], socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+            atomic_write(self.directory / 'proxy.json', json.dumps(proxy_config(source, address, wan)))
             command(['/sbin/rc-service', 'travelrouter-proxy', 'start'])
         self.attempted = True

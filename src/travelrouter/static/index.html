@@ -33,6 +33,15 @@
       </form>
     </section>
     <div id="panel" hidden>
+      <section class="card"><p class="eyebrow">LIVE DASHBOARD</p><h2>How your router is doing</h2><div id="metrics" class="metric-grid"></div><div id="traffic" class="networks"></div><h3>Connected devices</h3><div id="clients" class="networks"></div></section>
+      <section class="card"><p class="eyebrow">DNS &amp; REGION FILTERING</p><h2>Choose what gets through</h2><p>Lists help block known advertising, tracking, scam and malware domains. They cannot inspect encrypted page content or replace safe browsing habits.</p>
+        <form id="filter-form"><label class="checkbox"><input name="ads" type="checkbox" checked>Block advertising and tracking domains (HaGeZi Light)</label><label class="checkbox"><input name="threats" type="checkbox" checked>Block threat domains (HaGeZi TIF Mini)</label>
+          <label>Additional blocked domains<textarea name="domains" rows="3" placeholder="One domain per line"></textarea></label><label>Allowed domains<textarea name="allow" rows="3" placeholder="Exceptions, one domain per line"></textarea></label>
+          <label>Blocked domain endings<textarea name="tlds" rows="2" placeholder="For example: ru (one per line)"></textarea></label><label>Blocked destination countries<textarea name="countries" rows="2" placeholder="Two-letter codes, one per line: RU, CN"></textarea></label>
+          <p class="hint">Country ranges come from IPdeny and may block shared CDNs. They describe address allocation, not a guaranteed physical server location. IPv6 forwarding is disabled. Apps using their own encrypted DNS may bypass domain filtering; IP blocks still apply.</p>
+          <button>Save filtering rules</button><button id="refresh-filters" type="button" class="secondary">Update lists now</button>
+        </form><p id="filter-status" class="hint"></p>
+      </section>
       <section class="card"><p class="eyebrow">PRIVACY CONTROLS</p><h2>Your route to the Internet</h2><p id="privacy-status">Checking privacy settings.</p>
         <form id="dns-form"><label>DNS resolution<select name="mode"><option value="dot">DNS-over-TLS · encrypted upstream</option><option value="recursive">Recursive Unbound · root servers, unencrypted DNS transport</option></select></label><p class="hint">Both modes validate DNSSEC and cache responses locally. DNS follows the active protected tunnel.</p><button>Save DNS mode</button></form>
         <form id="privacy-form"><label>Privacy route<select name="mode"><option value="direct">Direct connection · no VPN (also for public-network sign-in)</option><option value="wireguard">WireGuard VPN · full tunnel with kill-switch</option><option value="proxy">Proxy tunnel · HTTPS CONNECT or SOCKS5 with kill-switch</option></select></label>
@@ -57,6 +66,12 @@
         <p><a href="/api/export" download="travelrouter-redacted.json">Export settings without passwords</a></p>
       </details>
       <button id="logout" class="secondary" type="button">Sign out</button>
+      <details class="card"><summary>Logs</summary><p>Local service logs only. DNS query history is not collected.</p><button id="refresh-logs" type="button" class="secondary">Refresh logs</button><pre id="logs" tabindex="0"></pre></details>
+      <details class="card"><summary>Export and restore settings</summary><p>Encrypted backups contain saved network and tunnel secrets. Use a unique backup password and keep the file private. Restoring replaces this router's saved settings and invalidates your session.</p>
+        <form id="backup-form"><label>Backup encryption password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></label><button>Download encrypted backup</button></form>
+        <form id="import-form"><label>Backup file<input name="file" type="file" accept="application/json,.json" required></label><label>Backup encryption password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="off" required></label><label class="checkbox"><input name="confirm" type="checkbox" required>I want to replace this router's settings with this backup.</label><button>Validate and restore</button></form>
+        <p><a href="/api/export" download="travelrouter-redacted.json">Download a redacted settings export</a></p>
+      </details>
     </div>
   </main>
   <footer>TravelRouter · Alpine Linux · Local control.<span>Experimental release · Verify on your hardware before travel.</span></footer>

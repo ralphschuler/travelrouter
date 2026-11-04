@@ -130,6 +130,7 @@ def render_unbound(mode):
              '    private-address: 172.16.0.0/12', '    private-address: 192.168.0.0/16',
              '    private-address: 169.254.0.0/16', '    private-domain: home.arpa']
     lines.append('    include: /etc/unbound/travelrouter-blocks.conf')
+    lines.append('    extended-statistics: yes')
     if mode == 'dot':
         lines += ['forward-zone:', '    name: "."', '    forward-tls-upstream: yes',
                   '    forward-addr: 1.1.1.1@853#cloudflare-dns.com',
@@ -137,4 +138,6 @@ def render_unbound(mode):
                   '    forward-addr: 9.9.9.9@853#dns.quad9.net']
     else:
         lines.append('    root-hints: /usr/share/dns-root-hints/named.root')
+    lines += ['remote-control:', '    control-enable: yes',
+              '    control-interface: /run/unbound/control.sock', '    control-use-cert: no']
     return '\n'.join(lines) + '\n'

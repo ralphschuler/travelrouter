@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .metrics import logs, snapshot
 from .security import Sessions, hash_password, validate_setup, verify_password
 
 LOG = logging.getLogger(__name__)
@@ -100,7 +101,11 @@ def make_server(address, store, backend):
                     self.send(403, {'error': 'Use the local router address'})
                 return
             if path == '/api/status':
-                self.send(200, backend.status())
+                status = backend.status()
+                if not self.session():
+                    status = {key: value for key, value in status.items()
+                              if key in {'state', 'setup_complete', 'ssid', 'address'}}
+                self.send(200, status)
                 return
             if path in {'/', '/app.js', '/style.css', '/forms.css'}:
                 name, kind = {'/': ('index.html', 'text/html; charset=utf-8'),
@@ -121,6 +126,12 @@ def make_server(address, store, backend):
                     self.send(409, {'error': 'Replace factory passwords before continuing'})
                 elif path == '/api/export':
                     self.send(200, backend.export())
+                elif path == '/api/metrics':
+                    config = store.load()
+                    interfaces = [config.get('ap_interface'), config.get('wan_interface'), 'trvpn0', 'trproxy0']
+                    self.send(200, snapshot(interfaces))
+                elif path == '/api/logs':
+                    self.send(200, logs())
                 else:
                     self.send(404, {'error': 'Unknown endpoint'})
 
@@ -133,7 +144,8 @@ def make_server(address, store, backend):
                 length = int(self.headers['Content-Length'])
             except (ValueError, TypeError) as error:
                 raise ValueError('Invalid Content-Length') from error
-            if length < 0 or length > 16384:
+            maximum = 1024 * 1024 if urlsplit(self.path).path == '/api/import' else 16384
+            if length < 0 or length > maximum:
                 self.send(413, {'error': 'Request body is too large'})
                 return None
             if self.headers.get_content_type() != 'application/json':
@@ -218,6 +230,12 @@ def make_server(address, store, backend):
             elif path == '/api/privacy':
                 backend.configure_privacy(data)
                 self.send(200, {'saved': True})
+            elif path == '/api/backup':
+                self.send(200, backend.backup(data.get('password')))
+            elif path == '/api/import':
+                backend.restore(data.get('backup'), data.get('password'))
+                sessions.clear()
+                self.send(200, {'restored': True, 'reconnect': True})
             elif path == '/api/saved':
                 self.send(200, {'networks': backend.saved()})
             elif path == '/api/connect':

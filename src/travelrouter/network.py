@@ -1,5 +1,6 @@
 """Small, shell-free NetworkManager adapter."""
 
+import configparser
 import re
 import shutil
 import subprocess
@@ -149,3 +150,20 @@ class Network:
     def resolvers(self, wan):
         output = self.nm('-g', 'IP4.DNS', 'device', 'show', interface(wan))
         return [line.strip() for line in output.splitlines() if line.strip()]
+
+    def export_profiles(self):
+        records = []
+        for path in self.profiles.glob('travelrouter-*.nmconnection'):
+            parser = configparser.ConfigParser(interpolation=None)
+            parser.read(path)
+            raw = parser['wifi']['ssid']
+            if re.fullmatch(r'(?:[0-9]{1,3};)+', raw):
+                ssid = bytes(int(value) for value in raw.split(';') if value).decode()
+            else:
+                ssid = raw
+            password = parser.get('wifi-security', 'psk', fallback='')
+            password = re.sub(r'\\([sntr\\])', lambda match: {'s': ' ', 'n': '\n', 't': '\t',
+                              'r': '\r', '\\': '\\'}[match[1]], password)
+            records.append({'ssid': ssid, 'password': password, 'allow_open': not bool(password),
+                            'priority': parser.getint('connection', 'autoconnect-priority', fallback=10)})
+        return records

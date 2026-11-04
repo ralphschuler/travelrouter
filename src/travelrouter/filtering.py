@@ -42,7 +42,7 @@ def domains_from_text(text):
         if not parts:
             continue
         candidate = parts[0]
-        if len(parts) == 2 and parts[0] in {'0.0.0.0', '127.0.0.1', '::'}:
+        if len(parts) == 2 and parts[0] in {'0.0.0.0', '127.0.0.1', '::'}:  # nosec B104 - hosts-file parser, not a listener
             candidate = parts[1]
         elif len(parts) != 1:
             continue
@@ -167,11 +167,14 @@ class Filtering:
         for country in settings['countries']:
             path = self.directory / (country + '.zone')
             if not path.is_file():
-                raise ValueError('Download country ranges before enabling a country block')
+                continue
             regions.update(parse_country_networks(path.read_text()))
         return render_block_zones(blocked, settings['allow'], settings['tlds']), sorted(regions)
 
     def status(self):
         path = self.directory / 'metadata.json'
         metadata = json.loads(path.read_text()) if path.exists() else {'updated': None, 'sources': {}}
-        return {'settings': self.settings(), 'metadata': metadata, 'last_error': self.error}
+        missing = [country for country in self.settings()['countries']
+                   if not (self.directory / (country + '.zone')).is_file()]
+        return {'settings': self.settings(), 'metadata': metadata, 'last_error': self.error,
+                'missing_countries': missing}

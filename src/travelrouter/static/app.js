@@ -1,5 +1,7 @@
 'use strict';
 let csrf = '';
+let lastMetrics = null;
+let filteringLoaded = false;
 const byId = id => document.getElementById(id);
 const show = (id, visible) => { byId(id).hidden = !visible; };
 const message = text => { byId('message').textContent = text; show('message', true); };
@@ -27,6 +29,7 @@ function signedIn(result) {
   show('login', false);
   show('setup', result.setup_required);
   show('panel', !result.setup_required);
+  filteringLoaded = false;
 }
 
 byId('login-form').addEventListener('submit', event => {
@@ -134,6 +137,76 @@ byId('privacy-form').addEventListener('submit', event => {
   });
 });
 
+const lines = value => value.split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
+byId('filter-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const form = event.target;
+    const data = {ads: form.elements.ads.checked, threats: form.elements.threats.checked};
+    for (const field of ['domains', 'allow', 'tlds', 'countries']) data[field] = lines(form.elements[field].value);
+    await api('filtering', data);
+    message('Filtering rules saved.');
+    await status();
+  });
+});
+byId('refresh-filters').addEventListener('click', event => busy(event.target, async () => {
+  await api('filtering/refresh', {}); message('Blocklists updated.'); await status();
+}));
+byId('refresh-logs').addEventListener('click', event => busy(event.target, async () => {
+  const result = await api('logs');
+  byId('logs').textContent = Object.entries(result).map(([name, entries]) => name.toUpperCase() + '\n' + entries.join('\n')).join('\n\n');
+}));
+byId('backup-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const result = await api('backup', {password: event.target.elements.password.value});
+    const url = URL.createObjectURL(new Blob([JSON.stringify(result)], {type: 'application/json'}));
+    const link = document.createElement('a'); link.href = url; link.download = 'travelrouter-encrypted-backup.json'; link.click();
+    URL.revokeObjectURL(url); event.target.reset(); message('Encrypted backup downloaded.');
+  });
+});
+byId('import-form').addEventListener('submit', event => {
+  event.preventDefault();
+  busy(event.submitter, async () => {
+    const file = event.target.elements.file.files[0];
+    if (!file || file.size > 750000) throw new Error('Backup must be smaller than 750 KB.');
+    await api('import', {backup: JSON.parse(await file.text()), password: event.target.elements.password.value});
+    event.target.reset(); csrf = ''; show('panel', false); show('login', true);
+    message('Settings restored. Reconnect to the restored Wi-Fi network and sign in with its administrator password.');
+  });
+});
+
+const formatBytes = value => value > 1048576 ? (value / 1048576).toFixed(1) + ' MiB' : (value / 1024).toFixed(1) + ' KiB';
+async function metrics() {
+  if (!csrf || byId('panel').hidden) return;
+  const current = await api('metrics');
+  byId('metrics').replaceChildren();
+  const used = 100 * (1 - current.memory.available_bytes / current.memory.total_bytes);
+  for (const [label, value] of [['Uptime', (current.uptime_seconds / 3600).toFixed(1) + ' h'],
+    ['Memory used', used.toFixed(0) + '%'], ['Load (1 min)', current.load_average[0].toFixed(2)],
+    ['Temperature', current.temperature_c === null ? 'N/A' : current.temperature_c.toFixed(1) + ' °C'],
+    ['DNS queries', current.dns['total.num.queries'] ?? 'N/A'], ['DNS cache hits', current.dns['total.num.cachehits'] ?? 'N/A']]) {
+    const tile = document.createElement('div'); const title = document.createElement('small'); title.textContent = label;
+    const number = document.createElement('strong'); number.textContent = value; tile.append(title, number); byId('metrics').append(tile);
+  }
+  byId('traffic').replaceChildren();
+  for (const [name, counters] of Object.entries(current.interfaces)) {
+    const row = document.createElement('div'); row.className = 'network';
+    let text = name + ' · Received ' + formatBytes(counters.rx_bytes) + ' · Sent ' + formatBytes(counters.tx_bytes);
+    if (lastMetrics && lastMetrics.interfaces[name]) {
+      const seconds = current.timestamp - lastMetrics.timestamp;
+      if (seconds > 0) text += ' · ↓ ' + formatBytes(Math.max(0, counters.rx_bytes - lastMetrics.interfaces[name].rx_bytes) / seconds) + '/s';
+    }
+    row.textContent = text; byId('traffic').append(row);
+  }
+  byId('clients').replaceChildren();
+  for (const client of current.clients) {
+    const row = document.createElement('p'); row.textContent = client.ip + ' · ' + client.hostname; byId('clients').append(row);
+  }
+  if (!current.clients.length) byId('clients').textContent = 'No current DHCP leases.';
+  lastMetrics = current;
+}
+
 async function status() {
   const info = await api('status');
   byId('state').textContent = ({online: 'Internet connected', captive: 'Public Wi-Fi sign-in required', offline: 'Offline · setup available'})[info.state];
@@ -149,6 +222,18 @@ async function status() {
     byId('details').append(key, text);
   }
   byId('hardware').textContent = info.hardware_note || info.last_error || '';
+  if (info.filtering) {
+    const filtering = info.filtering;
+    if (!filteringLoaded) {
+      const form = byId('filter-form');
+      for (const field of ['ads', 'threats']) form.elements[field].checked = filtering.settings[field];
+      for (const field of ['domains', 'allow', 'tlds', 'countries']) form.elements[field].value = filtering.settings[field].join('\n');
+      filteringLoaded = true;
+    }
+    byId('filter-status').textContent = filtering.metadata.updated
+      ? 'Lists updated: ' + new Date(filtering.metadata.updated * 1000).toLocaleString() + '. ' + (filtering.last_error || '')
+      : 'Lists will download after the first verified Internet connection. Custom domain rules work offline.';
+  }
   byId('privacy-status').textContent = info.privacy_mode === 'direct'
     ? 'Direct mode: the firewall is active; no VPN or proxy protects your connection.'
     : info.privacy_mode + ': kill-switch enabled. ' + (info.tunnel_ready && info.state === 'online' ? 'Protected connection verified.' : 'Waiting for a verified tunnel; direct client access is blocked.');
@@ -160,6 +245,7 @@ async function status() {
   }
 }
 
-api('session').then(signedIn).catch(() => {});
+api('session').then(result => { signedIn(result); return status(); }).catch(() => {});
 status().catch(error => message(error.message));
 setInterval(() => status().catch(() => {}), 15000);
+setInterval(() => metrics().catch(() => {}), 5000);
