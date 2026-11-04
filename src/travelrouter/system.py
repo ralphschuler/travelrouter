@@ -20,6 +20,7 @@ from .network import Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
 from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
+from .updates import Updates
 
 LOG = logging.getLogger(__name__)
 RUN = Path('/run/travelrouter')
@@ -154,6 +155,7 @@ class System:
         self.pending_restart = 0
         self.last_policy = None
         self.stop = threading.Event()
+        self.updates = Updates(self)
 
     def persist(self):
         persist_overlay()
@@ -271,6 +273,7 @@ class System:
                         else 'Unbound recursive DNS') if self.state == 'online' else self.state,
                 'firewall': self.last_policy is not None,
                 'filtering': self.filtering.status(),
+                'updates': {**self.updates.status, 'automatic': config.get('auto_updates', False)},
                 'hardware_note': None if self.network.wan else
                 'Connect a supported USB Wi-Fi adapter for upstream Wi-Fi.'}
 
@@ -372,6 +375,9 @@ class System:
                     except (OSError, ValueError, RuntimeError):
                         self.filtering.error = 'List refresh failed; previous valid lists remain in use.'
                         self.filtering.last_update = time.monotonic() - 82800
+                if (self.state == 'online' and self.store.load().get('auto_updates', False)
+                        and not self.updates.status['busy'] and time.monotonic() - self.updates.last_check > 86400):
+                    self.updates.start('packages')
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                 LOG.exception('Router state update failed')
                 self.last_error = 'A network operation failed; check the local console log.'

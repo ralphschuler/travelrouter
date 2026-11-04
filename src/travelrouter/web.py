@@ -144,7 +144,7 @@ def make_server(address, store, backend):
                 length = int(self.headers['Content-Length'])
             except (ValueError, TypeError) as error:
                 raise ValueError('Invalid Content-Length') from error
-            maximum = 1024 * 1024 if urlsplit(self.path).path == '/api/import' else 16384
+            maximum = 3 * 1024 * 1024 if urlsplit(self.path).path in {'/api/import', '/api/updates/install'} else 16384
             if length < 0 or length > maximum:
                 self.send(413, {'error': 'Request body is too large'})
                 return None
@@ -236,6 +236,24 @@ def make_server(address, store, backend):
                 backend.restore(data.get('backup'), data.get('password'))
                 sessions.clear()
                 self.send(200, {'restored': True, 'reconnect': True})
+            elif path == '/api/updates':
+                backend.updates.start(data.get('operation'))
+                self.send(202, {'started': True})
+            elif path == '/api/updates/install':
+                backend.updates.start('application', data.get('update'))
+                self.send(202, {'started': True})
+            elif path == '/api/updates/settings':
+                if type(data.get('automatic')) is not bool:
+                    raise ValueError('Automatic updates must be enabled or disabled')
+                config['auto_updates'] = data['automatic']
+                backend.save_config(config)
+                self.send(200, {'saved': True})
+            elif path == '/api/reboot':
+                if data.get('confirm') is not True:
+                    raise ValueError('Confirm the router reboot')
+                from .network import command
+                threading.Timer(3, lambda: command(['/sbin/reboot'])).start()
+                self.send(202, {'rebooting': True})
             elif path == '/api/saved':
                 self.send(200, {'networks': backend.saved()})
             elif path == '/api/connect':

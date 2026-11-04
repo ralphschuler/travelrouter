@@ -13,13 +13,17 @@ bundle_sha=7bc2ac2ac3bd15667f651dc8d10c8423f1272730f028bc8962384c30e5317f62
 
 [ "$(apk --print-arch)" = aarch64 ] || { echo 'Build requires native or emulated aarch64 Alpine'; exit 1; }
 [ ! -e "$build_dir" ] || { echo 'Use a fresh checkout for each image build'; exit 1; }
-apk add --no-cache curl tar gzip python3 mtools dosfstools util-linux coreutils
+apk add --no-cache curl tar gzip python3 py3-cryptography mtools dosfstools util-linux coreutils
 mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
 
-set -- $(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' "$source_dir/image/packages.txt")
+set --
+while IFS= read -r package; do
+    case "$package" in ''|'#'*) continue ;; esac
+    set -- "$@" "$package"
+done < "$source_dir/image/packages.txt"
 apk fetch --recursive --output "$build_dir/downloads" "$@"
 apk fetch --recursive --url "$@" > "$build_dir/package-urls.txt"
 for repository in main community; do
@@ -57,8 +61,9 @@ python3 "$source_dir/image/sbom.py" "$check" "$out" "$bundle_sha"
 
 # FAT32 has enough reserve for several overlay generations. Size is adaptive.
 used_kib=$(du -sk "$media" | cut -f1)
-size_mib=$(( ((used_kib / 1024 + 511) / 256) * 256 ))
-[ "$size_mib" -le 3800 ] || { echo 'Image exceeds the FAT32 build budget'; exit 1; }
+size_mib=$(( ((used_kib / 1024 * 3 + 1023) / 256) * 256 ))
+[ "$size_mib" -ge 4096 ] || size_mib=4096
+[ "$size_mib" -le 12000 ] || { echo 'Image exceeds the supported build budget'; exit 1; }
 fat="$build_dir/boot.fat"
 image="$out/travelrouter-cm5-aarch64.img"
 truncate -s "${size_mib}M" "$fat"
