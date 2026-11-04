@@ -30,6 +30,7 @@ class SecurityTests(unittest.TestCase):
             with self.subTest(ssid=ssid), self.assertRaises(ValueError):
                 validate_setup('a new admin password', 'a new wifi password', ssid, country)
         validate_setup('a new admin password', 'a new wifi password', 'My café', 'DE')
+        validate_setup('a longer pàssword 123', 'a separate wifi password', 'My café', 'DE')
 
     def test_configuration_is_private_and_survives_reload(self):
         with tempfile.TemporaryDirectory() as directory:

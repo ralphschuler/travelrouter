@@ -44,7 +44,7 @@ def validate_setup(admin_password, ap_password, ssid, country):
     validate_text(ssid, 'SSID', 1, 32)
     if admin_password == DEFAULT_ADMIN_PASSWORD or ap_password == DEFAULT_AP_PASSWORD:
         raise ValueError('Replace both factory passwords')
-    if hmac.compare_digest(admin_password, ap_password):
+    if hmac.compare_digest(admin_password.encode(), ap_password.encode()):
         raise ValueError('Use different administrator and Wi-Fi passwords')
     if not isinstance(country, str) or not re.fullmatch('[A-Z]{2}', country):
         raise ValueError('Select your two-letter Wi-Fi country code')
