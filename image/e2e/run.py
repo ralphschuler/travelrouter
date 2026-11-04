@@ -205,10 +205,16 @@ class Console:
             commands['unbound-foreground.log'] = (
                 'if ! rc-service unbound status >/dev/null 2>&1; then '
                 'timeout 5 /usr/sbin/unbound -dd -p -vv -c /etc/unbound/unbound.conf; fi')
+            commands['services-after-diagnostics.txt'] = 'rc-service unbound status; rc-service travelrouter status'
+            commands['application-before-foreground.log'] = 'tail -n 250 /var/log/travelrouter.log'
+            commands['application-foreground.log'] = (
+                'if ! rc-service travelrouter status >/dev/null 2>&1; then '
+                'timeout 10 env PYTHONPATH=/opt/travelrouter /usr/bin/python3 -u -m travelrouter; fi')
             commands['listeners-after-diagnostics.txt'] = 'ss -lntup; ps -ef'
+            commands['application-after-diagnostics.log'] = 'tail -n 250 /var/log/travelrouter.log'
         for name, command in commands.items():
             try:
-                result = self.command(command, timeout=10, check=False)
+                result = self.command(command, timeout=20 if name == 'application-foreground.log' else 10, check=False)
                 (output / name).write_text(result)
             except (OSError, RuntimeError, TimeoutError):
                 break
