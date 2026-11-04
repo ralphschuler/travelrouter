@@ -1,6 +1,6 @@
 """Boot the built image with its shipped RPi kernel and exercise real services.
 
-The CI-only init override starts an interactive shell after Alpine has restored
+The CI-only init override starts a noninteractive shell after Alpine has restored
 the image's apkovl and installed its packages. It injects simulated radio hardware
 before starting the unchanged OpenRC runlevels. Production code is never patched.
 """
@@ -23,7 +23,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REMOTE = '/root/ci-image-test'
-SHELL_PROMPT = rb'(?:^|\r?\n)(?:/|~) # $'
+BOOT_READY = rb'Installing packages to root filesystem: ok\.\r?$'
 BOOT_ERRORS = (b"switch_root: can't open", b"switch_root: can't execute")
 
 
@@ -116,12 +116,6 @@ class Console:
             for error in error_patterns:
                 if error in self.buffer:
                     raise RuntimeError('Guest boot failed before the test shell: ' + error.decode())
-            # BusyBox ash asks the terminal for its cursor position after the
-            # four-column root prompt. Answer its real terminal handshake; keep
-            # the raw escape sequence in console.log, outside prompt matching.
-            if b'\x1b[6n' in self.buffer:
-                self.send('\x1b[1;5R')
-                self.buffer = self.buffer.replace(b'\x1b[6n', b'')
             match = compiled.search(self.buffer)
             if match:
                 output = self.buffer[:match.end()]
@@ -145,9 +139,12 @@ class Console:
         raise TimeoutError(f'Guest did not reach expected state within {timeout} seconds')
 
     def boot(self):
-        self.expect(SHELL_PROMPT, 900, error_patterns=BOOT_ERRORS)
+        self.expect(BOOT_READY, 900, error_patterns=BOOT_ERRORS)
+        # The explicit +i init argument avoids ash's terminal line editor. Even
+        # -s auto-enables it on a TTY; cursor queries can corrupt queued commands.
+        # Input queues while the unchanged initramfs finishes switch_root.
+        self.command("stty -echo; case $- in *i*) echo 'Expected noninteractive CI shell'; exit 1;; esac", timeout=30)
         self.ready = True
-        self.command('stty -echo', timeout=10)
         self.command(f'mkdir -p {REMOTE}; chmod 700 {REMOTE}', timeout=10)
         self.command('test -f /opt/travelrouter/travelrouter/web.py', timeout=10)
         self.command("awk '$1==\"MemTotal:\" {ok=($2>=1800000)} END {exit !ok}' /proc/meminfo", timeout=10)
@@ -237,7 +234,7 @@ def run(args, report):
                '-dtb', str(args.scratch / 'board.dtb'), '-drive', f'file={overlay},if=sd,format=qcow2',
                '-append', 'earlycon=pl011,mmio32,0xfe201000 console=ttyAMA1,115200 '
                           'modules=loop,squashfs,sd-mod,usb-storage '
-                          'init=/bin/sh init_args=-i rootflags=size=1536M']
+                          'init=/bin/sh init_args=+i rootflags=size=1536M']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
                           'CI init shell, DTB RAM-bank/serial-console declarations and mac80211_hwsim radios. '
                           'No CM5 firmware, RP1 or physical radio qualification.')
