@@ -1,0 +1,25 @@
+#!/sbin/openrc-run
+# shellcheck disable=SC2034
+description="Optional LAN-only developer SSH"
+
+depend() {
+    need travelrouter-bootstrap
+}
+
+start() {
+    [ -f /etc/travelrouter/developer-enabled ] || return 0
+    ebegin "Starting developer SSH"
+    /sbin/start-stop-daemon --start --background --make-pidfile \
+        --pidfile /run/travelrouter-dev-sshd.pid --exec /usr/sbin/sshd -- \
+        -D -f /etc/travelrouter/sshd_config
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping developer SSH"
+    /sbin/start-stop-daemon --stop --oknodo \
+        --pidfile /run/travelrouter-dev-sshd.pid
+    result=$?
+    rm -f /run/travelrouter-dev-sshd.pid
+    eend "$result"
+}

@@ -84,6 +84,17 @@ The normal quality/image workflow runs this test after each new image build,
 before uploading the release image. Publication is restricted to tag pushes;
 all release gates, including the image boot test, must succeed.
 
+An additional release gate runs the extended `--recovery` scenario against the
+built CM5 image. It exercises panel-controlled SSH from trusted and untrusted
+simulated networks, stages an ephemeral-key-signed update, cold-boots it, and
+stages a deliberately broken update to test automatic rollback. The test key and
+broken application exist only on the disposable VM disk. Its QEMU build pins
+upstream commit `21fcfb6046082a06b82c17688634a1b769ee63a0`: QEMU 11.0 and
+11.1 treat arming the BCM2835 watchdog as an immediate reset and cannot test
+this behavior. See the [upstream watchdog fix](https://qemu.googlesource.com/qemu/+/21fcfb6046082a06b82c17688634a1b769ee63a0).
+The VM uses a Pi 4 model, not actual CM5 hardware; a separate CM5 hardware test
+is still necessary.
+
 For a reported problem with an existing release, manually run the workflow on
 a branch and set `image_release` to a semantic tag such as `v0.1.0`. That mode
 downloads the published image and verifies its checksum instead of rebuilding

@@ -223,6 +223,9 @@ def make_server(address, store, backend):
             elif path == '/api/dns':
                 backend.save_dns(data.get('mode'))
                 self.send(200, {'saved': True})
+            elif path == '/api/developer':
+                backend.save_developer(data)
+                self.send(200, {'saved': True})
             elif path == '/api/filtering':
                 backend.save_filtering(data)
                 self.send(200, {'saved': True})

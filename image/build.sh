@@ -18,6 +18,8 @@ mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
+python3 "$source_dir/image/initramfs_recovery.py" "$media/boot/initramfs-rpi" \
+    "$source_dir/rootfs/etc/travelrouter/recovery.sh"
 python3 "$source_dir/image/boot_config.py" cmdline "$media/cmdline.txt"
 
 set --
@@ -43,8 +45,8 @@ while IFS= read -r url; do
     ln "$build_dir/downloads/$name" "$media/repositories/$repository/aarch64/$name"
 done < "$build_dir/package-urls.txt"
 python3 "$source_dir/image/overlay.py" "$source_dir" "$build_dir"
-touch "$media/.travelrouter"
-printf 'enable_uart=1\n' > "$media/usercfg.txt"
+touch "$media/.travelrouter" "$media/.travelrouter-recovery-v1"
+printf 'enable_uart=1\n[cm5]\ndtoverlay=dwc2,dr_mode=host\n[all]\n' > "$media/usercfg.txt"
 
 # Verify all packages/signatures from the actual embedded repositories offline.
 check="$build_dir/check"

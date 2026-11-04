@@ -17,6 +17,7 @@ if grep -qi 'verification disabled' /root/ci-image-test/openrc-sysinit.log; then
     exit 1
 fi
 rc-service modloop status
+rc-service travelrouter-recovery status
 openrc boot
 modprobe mac80211_hwsim radios=3
 modprobe veth

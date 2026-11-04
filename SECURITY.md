@@ -30,7 +30,9 @@ test. Review the open hardware acceptance checklist before using it during trave
 - Saved upstream/tunnel secrets are root-only, but the boot overlay is not encrypted.
   Physical possession of the boot medium can expose them. Exported full backups
   are encrypted and authenticated with a user-supplied password.
-- No remote SSH service or UPnP port mapping is enabled.
+- SSH is disabled by default. An administrator can opt into root SSH using an
+  Ed25519 public key; the listener is restricted to the hotspot. UPnP port
+  mapping is not enabled.
 - Generic installer ISOs use stock Alpine's local root console. It is separate
   from the installed router's locked root account and is intended for local disk
   installation. The installer requires explicit disk selection and confirmation;

@@ -23,6 +23,8 @@ networkmanager-wifi
 networkmanager-openrc
 nftables
 openssl
+openssh-client-default
+openssh-server
 python3
 py3-cryptography
 util-linux-misc
