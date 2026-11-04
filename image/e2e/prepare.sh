@@ -1,6 +1,7 @@
 #!/bin/sh
 # This file exists only in the disposable VM's RAM root.
 set -eu
+case "${1:-}" in initial|restored) ;; *) echo 'Expected initial or restored phase' >&2; exit 2 ;; esac
 
 # Preserve the cold-start condition. Production startup must establish loopback.
 ip link set lo down
@@ -56,14 +57,21 @@ esac
 EOF
 chmod 700 /root/ci-image-test/udhcpc.sh
 
-# Read only the current AP fixture. Credentials never leave this isolated VM.
-python3 - <<'PY'
+# Connect with independently expected credentials, never learn the current secret
+# from the implementation under test. A lost Wi-Fi password must fail the reboot.
+python3 - "$1" <<'PY'
 import hashlib
 import json
+import sys
 from pathlib import Path
+sys.path.insert(0, '/root/ci-image-test')
+from client import FACTORY_WIFI, NEW_WIFI
 config = json.loads(Path('/etc/travelrouter/config.json').read_text())
-ssid = config['ssid'].encode()
-psk = hashlib.pbkdf2_hmac('sha1', config['ap_password'].encode(), ssid, 4096, 32).hex()
+ssid = (config['ssid'] if sys.argv[1] == 'initial' else 'TravelRouter-CI').encode()
+expected_wifi = FACTORY_WIFI if sys.argv[1] == 'initial' else NEW_WIFI
+if config['ap_password'] != expected_wifi:
+    raise RuntimeError('Wi-Fi credential did not match the expected boot phase')
+psk = hashlib.pbkdf2_hmac('sha1', expected_wifi.encode(), ssid, 4096, 32).hex()
 path = Path('/root/ci-image-test/client-wpa.conf')
 path.write_text('network={\nssid=' + ssid.hex() + '\npsk=' + psk + '\n}\n')
 path.chmod(0o600)

@@ -74,20 +74,34 @@ class Console:
         self.process.stdin.flush()
 
     def expect(self, pattern, timeout):
-        deadline = time.monotonic() + timeout
+        started = time.monotonic()
+        deadline = started + timeout
+        progress_at = started + 30
+        received = 0
         compiled = re.compile(pattern, re.MULTILINE)
         while time.monotonic() < deadline:
+            if time.monotonic() >= progress_at:
+                print(f'Guest wait: {int(time.monotonic() - started)}s elapsed; '
+                      f'{received} serial bytes received', flush=True)
+                progress_at = time.monotonic() + 30
+            if b'Kernel panic - not syncing' in self.buffer:
+                raise RuntimeError('Guest kernel panic; see console.log for the complete boot trace')
             match = compiled.search(self.buffer)
             if match:
                 output = self.buffer[:match.end()]
                 self.buffer = self.buffer[match.end():]
                 return output, match
             if self.process.poll() is not None:
+                remaining = self.process.stdout.read()
+                if remaining:
+                    self.log.write(remaining)
+                    self.log.flush()
                 raise RuntimeError(f'QEMU exited unexpectedly ({self.process.returncode})')
             readable, _, _ = select.select([self.process.stdout], [], [], 0.5)
             if readable:
                 chunk = os.read(self.process.stdout.fileno(), 65536)
                 if chunk:
+                    received += len(chunk)
                     self.log.write(chunk)
                     self.log.flush()
                     self.buffer += chunk
@@ -126,7 +140,7 @@ class Console:
             'interfaces.txt': 'ip -details address; ip route; iw dev',
             'listeners.txt': 'ss -lntup',
             'firewall.txt': 'nft list ruleset',
-            'system.log': 'tail -n 250 /var/log/messages',
+            'system.log': 'logread 2>/dev/null || tail -n 250 /var/log/messages',
             'application.log': 'tail -n 250 /var/log/travelrouter.log',
             'client-wifi.log': f'tail -n 150 {REMOTE}/client-wpa.log',
             'kernel.log': 'dmesg | tail -n 100',
@@ -176,11 +190,15 @@ def run(args, report):
     require(not overlay.exists(), 'Use a fresh image E2E scratch directory')
     capacity = 1 << (raw.stat().st_size - 1).bit_length()
     host_command([qemu_img, 'create', '-f', 'qcow2', '-F', 'raw', '-b', str(raw), str(overlay), str(capacity)])
+    # The shipped Pi4 DTB aliases PL011 as serial1; Raspberry Pi firmware normally
+    # applies console fixups, which QEMU's direct kernel boot deliberately skips.
+    # The kernel's PL011 driver uses that alias index, so this is ttyAMA1 here.
     command = [qemu, '-machine', 'raspi4b', '-accel', 'tcg,thread=multi', '-m', '2G', '-smp', '4',
                '-display', 'none', '-monitor', 'none', '-serial', 'stdio', '-nic', 'none', '-no-reboot',
                '-kernel', str(kernel), '-initrd', str(args.scratch / 'initramfs'),
                '-dtb', str(args.scratch / 'board.dtb'), '-drive', f'file={overlay},if=sd,format=qcow2',
-               '-append', 'console=ttyAMA0,115200 modules=loop,squashfs,sd-mod,usb-storage '
+               '-append', 'earlycon=pl011,mmio32,0xfe201000 console=ttyAMA1,115200 '
+                          'modules=loop,squashfs,sd-mod,usb-storage '
                           'init=/bin/sh init_args=-i rootflags=size=1536M']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
                           'CI init shell and mac80211_hwsim radios. No CM5 firmware, RP1 or physical radio qualification.')
@@ -195,7 +213,7 @@ def run(args, report):
             console.upload(HERE / 'prepare.sh')
             console.upload(HERE / 'client.py')
             report['stage'] = phase + ': OpenRC, WPA2 and DHCP'
-            console.command(f'sh {REMOTE}/prepare.sh', timeout=240)
+            console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
             # Verify the synthetic external server is really alive before testing denial.
             console.command("ip netns exec tr-untrusted python3 -c \"import socket; "
                             "socket.create_connection(('198.18.0.2',8080),3).close()\"")
@@ -205,7 +223,6 @@ def run(args, report):
             (output / 'client-results.txt').write_text(result)
             report.setdefault('passed', []).append(phase)
             console.command('sync', timeout=30)
-            console.diagnostics(output)
             # QEMU termination is a cold restart. The application must have fsynced
             # its overlay; no source image mutation or special reboot fixture is used.
         finally:

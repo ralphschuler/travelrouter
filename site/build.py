@@ -17,6 +17,7 @@ PAGES = {
     'panel-design': ('docs/panel-design.md', 'Panel design'),
     'hardware-test': ('docs/hardware-test.md', 'Hardware qualification'),
     'verification': ('docs/verification.md', 'Verification'),
+    'image-testing': ('docs/image-testing.md', 'Image boot tests'),
     'third-party-notices': ('THIRD_PARTY_NOTICES.md', 'Licenses & notices'),
 }
 LINKS = {Path(source).stem.lower(): slug + '.html' for slug, (source, _) in PAGES.items()}

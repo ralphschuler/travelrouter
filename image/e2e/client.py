@@ -14,6 +14,7 @@ ADDRESS = '10.42.0.1'
 NEW_ADMIN = 'CI-only-admin-password-729'
 NEW_WIFI = 'CI-only-wireless-password-841'
 FACTORY_ADMIN = 'ChangeMe-TravelRouter!'
+FACTORY_WIFI = 'TravelRouter-Setup!'
 
 
 def require(condition, message):

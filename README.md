@@ -84,7 +84,8 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
 See [operations and recovery](docs/operations.md), [security policy](SECURITY.md),
-[design](docs/design.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
+[design](docs/design.md), [image boot tests](docs/image-testing.md), and
+[third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License
 
