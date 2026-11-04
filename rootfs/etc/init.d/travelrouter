@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+description="TravelRouter local portal and connectivity controller"
+command=/usr/bin/python3
+command_args="-m travelrouter"
+command_background=yes
+pidfile=/run/travelrouter/daemon.pid
+output_log=/var/log/travelrouter.log
+error_log=/var/log/travelrouter.log
+export PYTHONPATH=/opt/travelrouter
+
+depend() {
+    need travelrouter-bootstrap networkmanager hostapd dnsmasq unbound
+    after chronyd
+}

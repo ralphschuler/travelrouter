@@ -6,8 +6,9 @@ import re
 import secrets
 import time
 
-DEFAULT_ADMIN_PASSWORD = 'ChangeMe-TravelRouter!'
-DEFAULT_AP_PASSWORD = 'TravelRouter-Setup!'
+# Public bootstrap credentials; forwarding stays blocked until both are replaced.
+DEFAULT_ADMIN_PASSWORD = 'ChangeMe-TravelRouter!'  # nosec B105
+DEFAULT_AP_PASSWORD = 'TravelRouter-Setup!'  # nosec B105
 
 
 def hash_password(password):

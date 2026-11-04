@@ -1,6 +1,7 @@
 """Small, shell-free NetworkManager adapter."""
 
 import re
+import shutil
 import subprocess
 import uuid as uuid_module
 from pathlib import Path
@@ -11,6 +12,10 @@ from .security import validate_text
 
 
 def command(arguments, timeout=20, input_text=None):
+    executable = shutil.which(Path(arguments[0]).name, path='/usr/sbin:/usr/bin:/sbin:/bin')
+    if not executable:
+        raise RuntimeError('Required router executable is missing')
+    arguments = [executable, *arguments[1:]]
     result = subprocess.run(arguments, input=input_text, capture_output=True, text=True,
                             timeout=timeout, check=False)  # nosec B603
     if result.returncode:
@@ -92,7 +97,7 @@ class Network:
                 networks[ssid] = record
         return sorted(networks.values(), key=lambda record: -record['signal'])
 
-    def connect(self, ssid, password='', allow_open=False):
+    def connect(self, ssid, password, allow_open=False):
         if not self.wan:
             raise ValueError('Connect a supported second Wi-Fi adapter for upstream access')
         path, identifier = write_profile(self.profiles, ssid, password, allow_open)

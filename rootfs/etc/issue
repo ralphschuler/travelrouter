@@ -1,0 +1,7 @@
+TravelRouter experimental image
+Local panel: http://10.42.0.1/
+Factory Wi-Fi: TravelRouter-XXXX / TravelRouter-Setup!
+Factory panel: admin / ChangeMe-TravelRouter!
+Replace both factory passwords in the local setup portal before connecting.
+No password-based console or SSH login. See docs/operations.md for recovery.
+

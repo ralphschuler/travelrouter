@@ -1,0 +1,2 @@
+rc_need="travelrouter-bootstrap"
+cfgfile=/etc/hostapd/hostapd.conf

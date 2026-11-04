@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TravelRouter</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header><a href="/" class="brand">TR<span>TravelRouter</span></a><span id="state" class="pill">Checking connection</span></header>
+  <main>
+    <div class="intro"><p class="eyebrow">YOUR PRIVATE NETWORK, ANYWHERE.</p><h1>A little router.<br>A safer connection.</h1><p id="summary">Connect to your private hotspot and choose where to go next.</p></div>
+    <p id="message" role="status" aria-live="polite" hidden></p>
+    <section id="login" class="card">
+      <p class="eyebrow">LOCAL ACCESS</p><h2>Welcome aboard</h2>
+      <p>Sign in to manage this router. On first use, sign in as admin with the factory password, then replace both passwords.</p>
+      <form id="login-form"><label>Administrator password<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label><button>Sign in <span>→</span></button></form>
+      <details><summary>First time here?</summary><p>Factory administrator password: <code>ChangeMe-TravelRouter!</code><br>Factory Wi-Fi passphrase: <code>TravelRouter-Setup!</code></p><p>Use these only during initial setup in a trusted location.</p></details>
+    </section>
+    <section id="setup" class="card" hidden>
+      <p class="eyebrow">REQUIRED BEFORE CONNECTING</p><h2>Make this network yours</h2>
+      <p>Replace both factory passwords. Your devices will disconnect briefly and must join again with your new Wi-Fi credentials.</p>
+      <form id="setup-form" class="settings-form">
+        <label>Wi-Fi network name<input name="ssid" value="My TravelRouter" required maxlength="32" autocomplete="off"></label>
+        <label>New Wi-Fi passphrase<input name="ap_password" type="password" required minlength="12" maxlength="63" autocomplete="new-password"></label>
+        <label>New administrator password<input name="admin_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+        <label>Confirm administrator password<input name="confirmation" type="password" required autocomplete="new-password"></label>
+        <label>Wi-Fi country code<input name="country" placeholder="e.g. DE, GB, US" pattern="[A-Z]{2}" maxlength="2" required autocomplete="off"></label>
+        <p class="hint">Use different passwords with at least 12 characters. Set the country where you are operating the router.</p>
+        <button>Save and secure router <span>→</span></button>
+      </form>
+    </section>
+    <div id="panel" hidden>
+      <div class="grid">
+        <section class="card"><p class="eyebrow">UPSTREAM</p><h2>Find a connection</h2><p>Choose a nearby Wi-Fi network. Saved networks reconnect automatically.</p><button id="scan" type="button">Scan nearby networks</button><div id="networks" class="networks"></div>
+          <form id="connect-form"><label>Network name<input name="ssid" maxlength="32" required autocomplete="off"></label><label>Network password<input name="password" type="password" maxlength="63" autocomplete="off"></label><label class="checkbox"><input name="allow_open" type="checkbox">This is an open network; connect without a password.</label><button>Connect and save <span>→</span></button></form>
+        </section>
+        <section class="card"><p class="eyebrow">AT A GLANCE</p><h2>Router status</h2><dl id="details"></dl><p id="hardware" class="hint"></p><button id="saved" class="secondary" type="button">Refresh saved networks</button><div id="saved-networks" class="networks"></div></section>
+      </div>
+      <details class="card"><summary>Router settings</summary><p>Changing credentials restarts the hotspot. Reconnect with the new Wi-Fi passphrase afterwards.</p>
+        <form id="settings-form" class="settings-form"><label>Wi-Fi network name<input name="ssid" maxlength="32" required></label><label>Wi-Fi passphrase<input name="ap_password" type="password" minlength="12" maxlength="63" required autocomplete="new-password"></label><label>Administrator password<input name="admin_password" type="password" minlength="12" maxlength="128" required autocomplete="new-password"></label><label>Confirm administrator password<input name="confirmation" type="password" required autocomplete="new-password"></label><label>Wi-Fi country code<input name="country" pattern="[A-Z]{2}" maxlength="2" required></label><button>Save settings</button></form>
+        <p><a href="/api/export" download="travelrouter-redacted.json">Export settings without passwords</a></p>
+      </details>
+      <button id="logout" class="secondary" type="button">Sign out</button>
+    </div>
+  </main>
+  <footer>TravelRouter · Alpine Linux · Local control.<span>Experimental release · Verify on your hardware before travel.</span></footer>
+</body>
+</html>

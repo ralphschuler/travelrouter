@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+description="Discover radios and establish the protected TravelRouter LAN"
+export PYTHONPATH=/opt/travelrouter
+
+depend() {
+    need localmount
+    after hwdrivers modloop udev-trigger
+    before networkmanager hostapd dnsmasq travelrouter
+}
+
+start() {
+    ebegin "Preparing TravelRouter hotspot"
+    /usr/bin/python3 -m travelrouter --bootstrap
+    eend $?
+}
