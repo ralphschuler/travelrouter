@@ -22,6 +22,7 @@ networkmanager-cli
 networkmanager-wifi
 networkmanager-openrc
 nftables
+openssl
 python3
 py3-cryptography
 util-linux-misc

@@ -91,6 +91,7 @@ menuentry 'TravelRouter (UEFI)' {
     initrd /boot/initramfs-lts
 }
 GRUB
+python3 "$source_dir/image/boot_config.py" grub "$build_dir/media/boot/grub/grub.cfg"
 grub-mkimage --format="$grub_platform" --directory="/usr/lib/grub/$grub_platform" \
     --prefix=/boot/grub --config="$build_dir/grub-early.cfg" --compression=xz \
     --output="$build_dir/media/efi/boot/$efi_filename" \

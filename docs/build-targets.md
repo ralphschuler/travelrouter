@@ -32,6 +32,15 @@ AP mode for every USB adapter. A VM needs suitable Wi-Fi hardware passthrough fo
 normal router use. CI provides simulated radios only inside its disposable test
 environment; production images do not contain those test fixtures.
 
+All runtime targets restore Alpine packages and the configuration overlay into a
+RAM filesystem. Their production boot configuration sets `rootflags=size=75%`,
+allowing that filesystem to grow to at most 75% of detected RAM. This is a limit,
+not memory reserved at boot; services and the kernel still need available RAM.
+Alpine's default 50% limit left less than 1 MiB free after package restoration in
+the 2 GiB boot test. CI uses the same production sizing policy. More RAM is useful
+for large blocklists and additional workloads; persisted settings remain on the
+writable boot volume.
+
 ## Choose an installation method
 
 Use the matching `.img.gz` when writing removable media with Raspberry Pi Imager
@@ -69,6 +78,10 @@ matching kernel, initramfs and signed module bundle. The installer ISO preserves
 the original El Torito boot structures; the writable runtime uses its own GRUB
 UEFI executable and external configuration. Target inputs are recorded in
 `image/targets/manifest.json`.
+
+The common runtime package set includes the OpenSSL command-line tool required
+by Alpine's modloop signature verification. Offline build validation checks that
+the executable is installed; boot tests exercise the actual module-bundle mount.
 
 Run in the matching architecture's pinned Alpine container:
 

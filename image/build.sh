@@ -18,6 +18,7 @@ mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
+python3 "$source_dir/image/boot_config.py" cmdline "$media/cmdline.txt"
 
 set --
 while IFS= read -r package; do
