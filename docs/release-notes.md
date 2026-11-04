@@ -1,5 +1,11 @@
 ## Experimental CM5, AMD64 and ARM64 images
 
+This pre-release includes early-boot recovery for signed updates, opt-in
+key-only developer SSH, and Android/iPhone USB tethering controls. It is for
+controlled testing. The recovery-enabled CM5 image still needs a physical
+boot and hotspot qualification on the target carrier board; CI uses simulated
+Wi-Fi radios. USB tethering also needs testing with real phones and cables.
+
 Choose the target for your hardware:
 
 - `travelrouter-cm5-aarch64.img.gz`: Raspberry Pi Compute Module 5.
