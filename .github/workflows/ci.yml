@@ -6,6 +6,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      image_release:
+        description: 'Optional existing release tag to boot-test instead of building an image'
+        required: false
+        type: string
+        default: ''
   schedule:
     - cron: '17 5 * * 1'
 
@@ -29,7 +35,7 @@ jobs:
       - run: ruff check src tests image site
       - run: bandit -q -r src image site -c pyproject.toml
       - run: python site/build.py && python site/check.py
-      - run: shellcheck -s sh image/build.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap
+      - run: shellcheck -s sh image/build.sh image/e2e/*.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap
       - run: PYTHONPATH=src coverage run --source=src/travelrouter -m unittest discover -s tests -v
       - run: coverage report
       - run: pip-audit -r requirements-dev.txt
@@ -80,17 +86,47 @@ jobs:
   image:
     name: Build and validate offline CM5 image
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Build inside pinned Alpine
+        if: inputs.image_release == ''
         run: >-
           docker run --rm --cap-add NET_ADMIN
           -e GITHUB_SHA -e GITHUB_REF_NAME
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
           sh image/build.sh
+      - name: Download the published image selected for diagnosis
+        if: github.event_name == 'workflow_dispatch' && inputs.image_release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_RELEASE: ${{ inputs.image_release }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/* ]] || exit 1
+          [[ "$IMAGE_RELEASE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          mkdir -p dist
+          gh release download "$IMAGE_RELEASE" --repo "$GITHUB_REPOSITORY" --dir dist \
+            --pattern travelrouter-cm5-aarch64.img.gz --pattern SHA256SUMS
+          cd dist
+          sha256sum --check --ignore-missing SHA256SUMS
+      - name: Boot the built image and exercise a wireless client
+        timeout-minutes: 35
+        run: >-
+          docker run --rm
+          -v "$PWD:/source" -w /source
+          alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+          sh image/e2e/run.sh dist/travelrouter-cm5-aarch64.img.gz
+      - name: Preserve image boot and client diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: image-boot-diagnostics
+          path: build/e2e-results/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Scan installed image packages
+        if: inputs.image_release == ''
         uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87
         with:
           version: v0.76.1
@@ -109,7 +145,7 @@ jobs:
 
   release:
     name: Publish attested experimental release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [quality, secrets, codeql, image]
     runs-on: ubuntu-24.04
     permissions:
