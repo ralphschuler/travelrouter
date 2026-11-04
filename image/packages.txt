@@ -18,6 +18,7 @@ iw
 linux-firmware
 logrotate
 networkmanager
+networkmanager-cli
 networkmanager-wifi
 networkmanager-openrc
 nftables
