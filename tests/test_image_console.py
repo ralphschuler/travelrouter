@@ -28,6 +28,23 @@ class ImageConsoleTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Guest boot failed'):
             console.expect(HARNESS.BOOT_READY, 1, error_patterns=HARNESS.BOOT_ERRORS)
 
+    def test_final_image_boot_options_and_root_sizing_are_preserved(self):
+        source = ('modules=loop,squashfs,sd-mod,usb-storage quiet console=tty1 '
+                  'rootflags=size=75% apkovl=travelrouter.apkovl.tar.gz\n')
+        result = HARNESS.instrument_cmdline(source)
+        self.assertIn('modules=loop,squashfs,sd-mod,usb-storage', result)
+        self.assertIn('rootflags=size=75%', result)
+        self.assertIn('apkovl=travelrouter.apkovl.tar.gz', result)
+        self.assertIn('console=ttyAMA1,115200', result)
+        self.assertIn('init=/bin/sh init_args=/proc/self/fd/0', result)
+        self.assertNotIn('quiet', result)
+        self.assertNotIn('console=tty1', result)
+
+    def test_unknown_or_multiline_release_cmdline_fails_closed(self):
+        for source in ('root=/dev/example', 'modules=loop\nrootflags=size=1G\n'):
+            with self.subTest(source=source), self.assertRaises(RuntimeError):
+                HARNESS.instrument_cmdline(source)
+
 
 if __name__ == '__main__':
     unittest.main()

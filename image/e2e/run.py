@@ -64,6 +64,17 @@ def expand_image(source, target):
     return compressed_hash.hexdigest(), digest.hexdigest()
 
 
+def instrument_cmdline(text):
+    """Preserve release boot options, changing only the declared CI console/init."""
+    require(len(text.strip().splitlines()) == 1, 'Expected one shipped kernel command line')
+    original = text.strip().split()
+    require(any(part.startswith('modules=') for part in original), 'Missing shipped Alpine boot module list')
+    retained = [part for part in original if part != 'quiet' and not
+                part.startswith(('console=', 'earlycon=', 'init=', 'init_args='))]
+    return ' '.join(retained + ['earlycon=pl011,mmio32,0xfe201000', 'console=ttyAMA1,115200',
+                                'init=/bin/sh', 'init_args=/proc/self/fd/0'])
+
+
 def prepare_emulated_dtb(dtb, report):
     """Declare QEMU RAM and free its serial console from absent Bluetooth."""
     fdtget, fdtput = executable('fdtget'), executable('fdtput')
@@ -269,9 +280,13 @@ def run(args, report):
     offset = struct.unpack_from('<I', mbr, 446 + 8)[0] * 512
     require(offset == 1024 * 1024, 'Unexpected release boot partition offset')
     for source_path, destination in [('boot/vmlinuz-rpi', 'kernel'), ('boot/initramfs-rpi', 'initramfs'),
-                                     ('bcm2711-rpi-4-b.dtb', 'board.dtb')]:
+                                     ('bcm2711-rpi-4-b.dtb', 'board.dtb'), ('cmdline.txt', 'cmdline.txt')]:
         host_command([mcopy, '-o', '-i', f'{raw}@@{offset}', f'::/{source_path}',
                       str(args.scratch / destination)])
+    cmdline = (args.scratch / 'cmdline.txt').read_bytes()
+    report['shipped_cmdline_sha256'] = hashlib.sha256(cmdline).hexdigest()
+    test_cmdline = instrument_cmdline(cmdline.decode())
+    report['test_cmdline_sha256'] = hashlib.sha256(test_cmdline.encode()).hexdigest()
     prepare_emulated_dtb(args.scratch / 'board.dtb', report)
     kernel = args.scratch / 'kernel'
     if kernel.read_bytes()[:2] == b'\x1f\x8b':
@@ -287,9 +302,7 @@ def run(args, report):
                '-display', 'none', '-monitor', 'none', '-serial', 'stdio', '-nic', 'none', '-no-reboot',
                '-kernel', str(kernel), '-initrd', str(args.scratch / 'initramfs'),
                '-dtb', str(args.scratch / 'board.dtb'), '-drive', f'file={overlay},if=sd,format=qcow2',
-               '-append', 'earlycon=pl011,mmio32,0xfe201000 console=ttyAMA1,115200 '
-                          'modules=loop,squashfs,sd-mod,usb-storage '
-                          'init=/bin/sh init_args=/proc/self/fd/0']
+               '-append', test_cmdline]
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
                           'CI init shell, DTB RAM-bank/serial-console declarations and mac80211_hwsim radios. '
                           'No CM5 firmware, RP1 or physical radio qualification.')
