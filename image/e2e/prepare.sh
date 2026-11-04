@@ -5,7 +5,18 @@ case "${1:-}" in initial|restored) ;; *) echo 'Expected initial or restored phas
 
 # Preserve the cold-start condition. Production startup must establish loopback.
 ip link set lo down
-openrc sysinit
+command -v openssl >/dev/null || { echo 'OpenSSL is required for modloop signature verification'; exit 1; }
+if ! openrc sysinit > /root/ci-image-test/openrc-sysinit.log 2>&1; then
+    cat /root/ci-image-test/openrc-sysinit.log
+    exit 1
+fi
+cat /root/ci-image-test/openrc-sysinit.log
+grep -q 'Verifying modloop' /root/ci-image-test/openrc-sysinit.log
+if grep -qi 'verification disabled' /root/ci-image-test/openrc-sysinit.log; then
+    echo 'Modloop signature verification was disabled'
+    exit 1
+fi
+rc-service modloop status
 openrc boot
 modprobe mac80211_hwsim radios=3
 modprobe veth
@@ -27,6 +38,7 @@ ip netns exec tr-untrusted python3 -m http.server 8080 --bind 198.18.0.2 >/root/
 
 # Run the shipped default runlevel and service dependency graph unchanged.
 openrc default
+python3 /root/ci-image-test/lifecycle.py capture
 rc-service hostapd status
 rc-service dnsmasq status
 rc-service unbound status

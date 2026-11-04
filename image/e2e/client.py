@@ -9,6 +9,8 @@ import sys
 import time
 from pathlib import Path
 
+from lifecycle import DIRECTORY, assert_controller, first_policy, service_identity, wait_restart
+
 ADDRESS = '10.42.0.1'
 # Public credentials used only inside the disposable guest fixture.
 NEW_ADMIN = 'CI-only-admin-password-729'
@@ -88,6 +90,7 @@ def main():
         return
     lease = ipaddress.ip_address(Path('/root/ci-image-test/client-address').read_text().strip())
     require(lease in ipaddress.ip_network('10.42.0.0/24'), 'Client did not receive a LAN DHCP lease')
+    first_policy()
     dns_answer(ADDRESS, 'router.home.arpa')
     dns_answer('8.8.8.8', 'offline-test.example')
     client = Client()
@@ -112,6 +115,7 @@ def main():
         change = {'admin_password': NEW_ADMIN, 'ap_password': NEW_WIFI,
                   'ssid': 'TravelRouter-CI', 'country': 'DE'}
         client.expect(403, '/api/setup', change, headers={'X-CSRF-Token': 'invalid-fixture-token'})
+        (DIRECTORY / 'before-setup.json').write_text(json.dumps(service_identity('hostapd')))
         client.expect(200, '/api/setup', change)
         print('Forced setup, CSRF and real overlay persistence request passed', flush=True)
     elif phase == 'restored':
@@ -122,6 +126,12 @@ def main():
         client.expect(200, '/api/logs')
         client.expect(403, '/api/dns', {'mode': 'recursive'},
                       headers={'X-CSRF-Token': 'invalid-fixture-token'})
+        for mode in ('recursive', 'dot'):
+            previous = service_identity('unbound')
+            client.expect(200, '/api/dns', {'mode': mode})
+            wait_restart('unbound', previous=previous)
+            assert_controller()
+            client.expect(200, '/api/metrics')
         print('Reboot preserved rotated credentials; dashboard metrics/logs respond', flush=True)
     else:
         raise ValueError('Unknown test phase')

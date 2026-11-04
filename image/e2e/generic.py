@@ -206,7 +206,7 @@ def runtime(args, architecture, raw, report):
             report['stage'] = phase + ': installed runtime UEFI boot'
             print(report['stage'], flush=True)
             console.boot()
-            for fixture in ('prepare.sh', 'client.py', 'firewall.py'):
+            for fixture in ('prepare.sh', 'client.py', 'firewall.py', 'lifecycle.py'):
                 console.upload(HERE / fixture)
             report['stage'] = phase + ': real OpenRC, WPA2 and DHCP'
             console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
@@ -214,8 +214,11 @@ def runtime(args, architecture, raw, report):
             result = console.command(f'python3 {REMOTE}/firewall.py', timeout=90)
             (output / 'firewall-results.txt').write_text(result)
             report['stage'] = phase + ': wireless HTTP, DNS and credentials'
-            result = console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py {phase}', timeout=120)
+            result = console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py {phase}', timeout=180)
             (output / 'client-results.txt').write_text(result)
+            if phase == 'initial':
+                result = console.command(f'python3 {REMOTE}/lifecycle.py after-setup', timeout=60)
+                (output / 'ap-restart-results.txt').write_text(result)
             console.command('sync', timeout=30)
             report.setdefault('runtime_passed', []).append(phase)
         finally:

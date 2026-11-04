@@ -206,6 +206,8 @@ class Console:
             'firewall.txt': 'nft list ruleset',
             'system.log': 'logread 2>/dev/null || tail -n 250 /var/log/messages',
             'application.log': 'tail -n 250 /var/log/travelrouter.log',
+            'unbound.log': 'tail -n 250 /var/log/travelrouter-dns.log',
+            'openrc-sysinit.log': f'cat {REMOTE}/openrc-sysinit.log',
             'client-wifi.log': f'tail -n 150 {REMOTE}/client-wpa.log',
             'kernel.log': 'dmesg | tail -n 100',
         }
@@ -317,6 +319,7 @@ def run(args, report):
             console.upload(HERE / 'prepare.sh')
             console.upload(HERE / 'client.py')
             console.upload(HERE / 'firewall.py')
+            console.upload(HERE / 'lifecycle.py')
             report['stage'] = phase + ': OpenRC, WPA2 and DHCP'
             console.command(f'sh {REMOTE}/prepare.sh {phase}', timeout=240)
             # Verify the synthetic external server is really alive before testing denial.
@@ -327,8 +330,11 @@ def run(args, report):
             (output / 'firewall-results.txt').write_text(result)
             console.command(f'ip netns exec tr-untrusted python3 {REMOTE}/client.py untrusted', timeout=30)
             report['stage'] = phase + ': client HTTP, DNS and credentials'
-            result = console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py {phase}', timeout=120)
+            result = console.command(f'ip netns exec tr-client python3 {REMOTE}/client.py {phase}', timeout=180)
             (output / 'client-results.txt').write_text(result)
+            if phase == 'initial':
+                result = console.command(f'python3 {REMOTE}/lifecycle.py after-setup', timeout=60)
+                (output / 'ap-restart-results.txt').write_text(result)
             report.setdefault('passed', []).append(phase)
             console.command('sync', timeout=30)
             # QEMU termination is a cold restart. The application must have fsynced
