@@ -1,16 +1,21 @@
 # CM5 hardware qualification
 
-Status: **qualification incomplete**. The v0.1.0 image was written to a CM5
-Rev 1.0 with 64 GB eMMC on 2026-11-04 and passed the imaging tool's read-back
-verification. A physical client can join its hotspot and receives a
-`10.42.0.x` lease, but Safari cannot reach `http://10.42.0.1/`. That failure is
-under investigation; the image is not yet qualified for travel use.
+Status: **qualification incomplete**. A local test image was written to a CM5
+with 64 GB eMMC and verified by full readback. A physical client joined the
+hotspot, completed initial credential rotation and reached the dashboard.
+The attached USB adapter was not detected, so Internet routing and the new
+recovery-enabled image still require physical verification.
+
+The tested Realtek RTL8191SU adapter (`0bda:8172`) is not supported by the
+shipped Linux 6.18 kernel: its former `r8712u` driver was removed upstream.
+The presence of `rtl8712u.bin` firmware alone does not provide a driver. See
+the [upstream removal](https://lkml.rescloud.iu.edu/hypermail/linux/kernel/2410.2/06082.html).
 
 - [ ] Record CM5 RAM/eMMC variant, carrier board, `lsusb`, both Wi-Fi drivers.
 - [x] Boot without Ethernet or upstream and observe the TravelRouter hotspot.
 - [x] Join the hotspot and obtain a `10.42.0.x` DHCP lease.
-- [ ] Open the operations panel/captive portal and verify the first-setup gate.
-- [ ] Replace both credentials; rejoin AP and log in.
+- [x] Open the operations panel/captive portal and verify the first-setup gate.
+- [x] Replace both credentials; rejoin AP and log in.
 - [ ] Scan/join/save upstream; verify Internet checks, DHCP and DNS.
 - [ ] Reboot; confirm saved upstream and administrator/AP settings survive.
 - [ ] Test a real public captive login and offline portal transitions.

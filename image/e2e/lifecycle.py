@@ -73,10 +73,12 @@ def wait_restart(service, previous=None, after_start=None, timeout=45):
 
 
 def first_policy():
-    original = assert_controller()
-    # Boot starts dnsmasq before the controller; a newer dnsmasq process proves
-    # that the controller's first real policy application completed its restart.
-    wait_restart('dnsmasq', after_start=original[1])
+    # The boot DNS configuration can already match the initial policy. Require
+    # the original controller, live DNS service and HTTP rather than a restart.
+    assert_controller()
+    service_identity('dnsmasq')
+    panel_http()
+    print('Initial policy retains live DNS and the original panel process', flush=True)
 
 
 def assert_ap_ssid(config, expected):
