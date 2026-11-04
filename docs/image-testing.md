@@ -17,6 +17,8 @@ QEMU 11.0.3 otherwise advertises only its lower 960 MiB to Linux despite allocat
 2 GiB. The reserved VideoCore region stays excluded. Original/test device-tree
 hashes and this fixup are recorded in `result.json`; the release image, kernel
 and initramfs are unchanged.
+The copied device tree also disables the absent Bluetooth device on the emulated
+serial controller, exposing its terminal device for the test harness.
 
 A CI-only initial shell loads `mac80211_hwsim` and creates three simulated radios:
 two for the router and one in a separate client network namespace. It runs the
@@ -41,6 +43,26 @@ with narrowly scoped temporary test allowances. After removing those allowances,
 fresh connections must hit passive counters immediately before the shipped drop
 policy. A timeout caused by a broken route cannot pass this check. The temporary
 rules exist only in the disposable VM and are cleaned up after each measurement.
+
+## Generic UEFI targets
+
+The AMD64 and ARM64 jobs boot their installer ISO through QEMU's corresponding
+UEFI firmware and GRUB. A disposable ISO copy changes only the external GRUB
+configuration to select a serial console and the test's initial shell. The
+installer script, embedded runtime image, bootloader code and Alpine packages
+remain the shipped versions.
+
+The test runs the actual installer against an empty file-backed virtual disk,
+provides its explicit disk/erase confirmations, and requires its complete
+read-back verification. After stopping that VM, the host independently hashes
+the whole written image region and compares it with the built runtime image.
+
+That installed disk then boots through UEFI and GRUB for both runtime test
+phases. Only its copied external GRUB configuration receives the test console
+and initial-shell arguments. The same simulated-radio, OpenRC, DHCP, DNS,
+HTTP, firewall and cold-reboot checks run against each architecture. Original
+ISO/image hashes, test-copy hashes and firmware hashes appear in the diagnostics.
+The released images contain no VM-specific serial argument or test account.
 
 ## Boundaries
 
