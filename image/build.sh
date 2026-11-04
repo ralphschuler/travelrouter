@@ -67,7 +67,7 @@ size_mib=$(( ((used_kib * 3 / 1024 + 1023) / 256) * 256 ))
 fat="$build_dir/boot.fat"
 image="$out/travelrouter-cm5-aarch64.img"
 truncate -s "${size_mib}M" "$fat"
-mkfs.vfat -F 32 -n TRAVELROUTER "$fat"
+mkfs.vfat -F 32 -n TRVROUTER "$fat"
 for entry in "$media"/* "$media"/.[!.]*; do
     [ -e "$entry" ] || continue
     mcopy -s -i "$fat" "$entry" ::

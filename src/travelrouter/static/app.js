@@ -279,7 +279,7 @@ async function metrics() {
 async function status() {
   const info = await api('status');
   byId('state').dataset.state = info.state;
-  byId('state').textContent = ({online: 'Internet connected', captive: 'Public Wi-Fi sign-in required', offline: 'Offline · setup available'})[info.state];
+  byId('state').textContent = ({online: 'Connected', captive: 'Sign-in required', offline: 'Offline'})[info.state];
   byId('summary').textContent = info.state === 'captive'
     ? 'Your upstream network needs a sign-in. Open a plain HTTP page in another tab to finish its login.'
     : info.state === 'online' ? 'Your devices are behind the router firewall. Client DNS uses encrypted upstream resolution.'
