@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +21,27 @@ def target_spec(path, target):
     if manifest.get('schema') != 1 or target not in manifest['targets']:
         raise ValueError('Unknown target manifest or target')
     return {key: value for key, value in manifest.items() if key != 'targets'} | manifest['targets'][target]
+
+
+def bootloader_build(build, spec):
+    # These packages live in the builder, not in the runtime APK inventory.
+    packages = {}
+    for paragraph in Path('/lib/apk/db/installed').read_text().split('\n\n'):
+        fields = dict(line.split(':', 1) for line in paragraph.splitlines()
+                      if len(line) >= 2 and line[1] == ':')
+        if fields.get('P') in {'grub', 'grub-efi'}:
+            packages[fields['P']] = fields['V']
+    if set(packages) != {'grub', 'grub-efi'}:
+        raise ValueError('Cannot identify the installed GRUB builder packages')
+    # Fixed builder executable and argument; no target or user data is executed.
+    tool_version = subprocess.check_output(['/usr/bin/grub-mkimage', '--version'],  # nosec B603
+                                           text=True, timeout=10).strip()
+    if not tool_version:
+        raise ValueError('Cannot identify the GRUB image builder version')
+    efi_path = Path('efi/boot') / spec['efi_filename']
+    return {'builder_packages': packages, 'grub_mkimage_version': tool_version,
+            'platform': spec['grub_platform'], 'efi_path': str(efi_path),
+            'efi_sha256': digest(Path(build) / 'media' / efi_path)}
 
 
 def finish(manifest, target, build, out):
@@ -46,6 +68,7 @@ def finish(manifest, target, build, out):
         str(path.relative_to(build / 'media')): digest(path)
         for path in (build / 'media/boot').glob('*') if path.is_file()
     }
+    metadata['runtime_bootloader_build'] = bootloader_build(build, spec)
     metadata['runtime_overlay_sha256'] = digest(build / 'media/travelrouter.apkovl.tar.gz')
     metadata['installer_validation_packages'] = (build / 'installer-packages.txt').read_text().splitlines()
     metadata['installer_package_sha256'] = {
