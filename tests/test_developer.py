@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from travelrouter.config import ConfigStore
 from travelrouter.developer import configure_files, render_sshd_config, root_shadow, validate_public_key
+from travelrouter.policy import render_dns
 from travelrouter.system import System
 
 
@@ -87,3 +88,28 @@ class DeveloperTests(unittest.TestCase):
             self.assertIn('root:!:', (etc / 'shadow').read_text())
             self.assertFalse((etc / 'travelrouter/developer-enabled').exists())
             self.assertFalse((etc / 'travelrouter/ssh_authorized_keys').exists())
+
+    def test_ssh_firewall_change_does_not_restart_unchanged_dns(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            etc = Path(temporary)
+            (etc / 'unbound').mkdir()
+            (etc / 'unbound/travelrouter-blocks.conf').write_text('zones')
+            (etc / 'dnsmasq.conf').write_text(render_dns('wlan0', 'offline', []))
+            router = System.__new__(System)
+            router.store = Mock()
+            router.store.load.return_value = {'setup_complete': True, 'developer_enabled': True}
+            router.filtering = Mock()
+            router.filtering.status.return_value = {'missing_countries': []}
+            router.filtering.rules.return_value = ('zones', [])
+            router.privacy = Mock(mode='direct')
+            router.ap, router.last_dns_mode, router.last_policy, router.filter_revision = 'wlan0', 'dot', None, 0
+
+            def scoped_path(value):
+                return etc / str(value).removeprefix('/etc/')
+
+            with patch('travelrouter.system.Path', side_effect=scoped_path), \
+                 patch('travelrouter.system.atomic_write'), patch('travelrouter.system.command') as run:
+                router.apply('offline', None)
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertFalse(any('dnsmasq' in args for args in commands))
+            self.assertTrue(any('nft' in args[0] for args in commands))

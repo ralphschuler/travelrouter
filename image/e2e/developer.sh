@@ -9,6 +9,32 @@ mkdir -p /run/openrc /var/empty
 printf '%s\n' default > /run/openrc/softlevel
 cp /source/rootfs/etc/init.d/travelrouter-ssh /etc/init.d/travelrouter-ssh
 chmod 755 /etc/init.d/travelrouter-ssh
+rc-service --nodeps travelrouter-ssh start
+rc-service --nodeps travelrouter-ssh stop
+# A service can already have exited while its parent has not reaped it.
+rc-service --nodeps travelrouter-ssh start
+python3 - <<'PY' &
+import os
+import time
+pid = os.fork()
+if pid == 0:
+    os._exit(0)
+with open('/run/travelrouter-dev-sshd.pid', 'w') as output:
+    output.write(str(pid) + '\n')
+time.sleep(20)
+PY
+zombie_parent=$!
+attempt=0
+while [ ! -s /run/travelrouter-dev-sshd.pid ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 50 ] || exit 1
+    sleep 0.1
+done
+sleep 0.2
+rc-service --nodeps travelrouter-ssh stop
+kill "$zombie_parent" 2>/dev/null || :
+wait "$zombie_parent" 2>/dev/null || :
+[ ! -e /run/travelrouter-dev-sshd.pid ]
 sed -i 's/^root:[^:]*:/root:!:/' /etc/shadow
 ssh-keygen -q -t ed25519 -N '' -f /tmp/allowed
 ssh-keygen -q -t ed25519 -N '' -f /tmp/rejected

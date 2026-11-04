@@ -416,9 +416,12 @@ class System:
             atomic_write('/etc/unbound/unbound.conf', render_unbound(dns_mode), 0o644)
             command(['/sbin/rc-service', '--nodeps', 'unbound', 'restart'])
             self.last_dns_mode = dns_mode
-        atomic_write('/etc/dnsmasq.conf', render_dns(self.ap, effective, resolvers), 0o644)
-        # These are our boot dependencies; a normal OpenRC restart would stop us.
-        command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
+        dns_path = Path('/etc/dnsmasq.conf')
+        dns_content = render_dns(self.ap, effective, resolvers)
+        if not dns_path.exists() or dns_path.read_text() != dns_content:
+            atomic_write(dns_path, dns_content, 0o644)
+            # A normal OpenRC restart would stop this controller through dependencies.
+            command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
         self.last_policy = key
         self.state, self.wan = effective, wan
 

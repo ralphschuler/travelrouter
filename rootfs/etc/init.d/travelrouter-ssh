@@ -17,9 +17,22 @@ start() {
 
 stop() {
     ebegin "Stopping developer SSH"
-    /sbin/start-stop-daemon --stop --oknodo \
-        --pidfile /run/travelrouter-dev-sshd.pid
-    result=$?
-    rm -f /run/travelrouter-dev-sshd.pid
+    result=0
+    if [ -f /run/travelrouter-dev-sshd.pid ]; then
+        read -r daemon_pid < /run/travelrouter-dev-sshd.pid || return 1
+        case "$daemon_pid" in *[!0-9]*|'') return 1 ;; esac
+        /sbin/start-stop-daemon --stop --pidfile /run/travelrouter-dev-sshd.pid \
+            --exec /usr/sbin/sshd || result=$?
+        if [ "$result" -ne 0 ]; then
+            # Some init environments report failure after TERM was delivered;
+            # a missing or zombie process is already unable to accept SSH.
+            for attempt in 1 2 3 4 5; do
+                state=$(awk '{print $3}' "/proc/$daemon_pid/stat" 2>/dev/null || :)
+                if [ -z "$state" ] || [ "$state" = Z ]; then result=0; break; fi
+                sleep 1
+            done
+        fi
+    fi
+    [ "$result" -ne 0 ] || rm -f /run/travelrouter-dev-sshd.pid
     eend "$result"
 }
