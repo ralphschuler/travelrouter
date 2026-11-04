@@ -107,10 +107,12 @@ def make_server(address, store, backend):
                               if key in {'state', 'setup_complete', 'ssid', 'address'}}
                 self.send(200, status)
                 return
-            if path in {'/', '/app.js', '/style.css', '/forms.css'}:
+            if path in {'/', '/app.js', '/style.css', '/forms.css', '/fonts/plex-sans-regular.woff2', '/fonts/plex-sans-semibold.woff2'}:
                 name, kind = {'/': ('index.html', 'text/html; charset=utf-8'),
                               '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
                               '/forms.css': ('forms.css', 'text/css; charset=utf-8'),
+                              '/fonts/plex-sans-regular.woff2': ('fonts/plex-sans-regular.woff2', 'font/woff2'),
+                              '/fonts/plex-sans-semibold.woff2': ('fonts/plex-sans-semibold.woff2', 'font/woff2'),
                               '/style.css': ('style.css', 'text/css; charset=utf-8')}[path]
                 self.send(200, (ASSETS / name).read_bytes(), content_type=kind)
                 return

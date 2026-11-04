@@ -1,7 +1,9 @@
 """Validate installed packages and real service parsers in the offline root."""
 
+import os
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +30,12 @@ def validate(root):
     root = Path(root)
     (root / 'run/travelrouter').mkdir(parents=True, exist_ok=True)
     (root / 'run/unbound').mkdir(parents=True, exist_ok=True)
+    for name, minor in (('null', 3), ('random', 8), ('urandom', 9)):
+        path = root / 'dev' / name
+        if path.exists() and not path.is_char_device():
+            path.unlink()
+        if not path.exists():
+            os.mknod(path, stat.S_IFCHR | 0o666, os.makedev(1, minor))
     (root / 'etc/unbound/travelrouter-blocks.conf').write_text('local-zone: "blocked.example" always_nxdomain\n')
     for entry in (root / 'etc/runlevels').glob('*/*'):
         if not (root / 'etc/init.d' / entry.name).is_file():

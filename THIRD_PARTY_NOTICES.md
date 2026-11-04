@@ -13,6 +13,8 @@ Python, UI, configuration templates, and build scripts, not to third-party code.
   dependencies retain their own licenses. Firmware has component-specific terms.
 - [sing-box](https://github.com/SagerNet/sing-box) is an independently developed
   proxy platform distributed by Alpine. TravelRouter is not affiliated with it.
+- IBM Plex Sans is bundled locally under the SIL Open Font License 1.1. The
+  original license is included in `src/travelrouter/static/fonts/LICENSE.txt`.
 - [HaGeZi DNS blocklists](https://github.com/hagezi/dns-blocklists) are fetched at
   runtime over HTTPS. The default sources are Light and TIF Mini in plain-domain
   format. The upstream repository publishes GPL-3.0 terms and source attribution.

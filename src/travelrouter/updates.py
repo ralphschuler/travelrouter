@@ -70,7 +70,7 @@ def verify_update(envelope, key, current_version):
                 path = PurePosixPath(entry.name)
                 if (not entry.isfile() or path.is_absolute() or '..' in path.parts
                         or not path.parts or path.parts[0] != 'travelrouter'
-                        or path.suffix not in {'.py', '.js', '.html', '.css'}
+                        or path.suffix not in {'.py', '.js', '.html', '.css', '.woff2', '.txt'}
                         or entry.size > 1024 * 1024 or len(files) >= 500):
                     raise ValueError('Update contains unsupported files')
                 total += entry.size

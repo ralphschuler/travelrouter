@@ -5,7 +5,36 @@ let filteringLoaded = false;
 let updatesLoaded = false;
 const byId = id => document.getElementById(id);
 const show = (id, visible) => { byId(id).hidden = !visible; };
-const message = text => { byId('message').textContent = text; show('message', true); };
+const message = (text, error = false) => {
+  byId('message').textContent = text; byId('message').dataset.error = String(error); show('message', true);
+};
+const viewNames = {dashboard: 'Overview', network: 'Connections', privacy: 'VPN & DNS',
+  filtering: 'Filtering', logs: 'Logs', updates: 'Updates', settings: 'Settings & backups'};
+
+function selectView(focus = false) {
+  const view = Object.hasOwn(viewNames, location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard';
+  for (const name of Object.keys(viewNames)) show('view-' + name, name === view);
+  for (const link of document.querySelectorAll('[data-view]')) {
+    if (link.dataset.view === view) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  byId('page-title').textContent = viewNames[view];
+  byId('page-section').textContent = viewNames[view];
+  document.title = viewNames[view] + ' — TravelRouter';
+  byId('mobile-more').open = false;
+  if (focus && !byId('panel').hidden) { byId('page-title').focus({preventScroll:true}); window.scrollTo({top:0}); }
+}
+window.addEventListener('hashchange', () => selectView(true));
+selectView();
+function privacyFields() {
+  const mode = byId('privacy-mode').value;
+  for (const group of document.querySelectorAll('[data-privacy-fields]')) group.hidden = group.dataset.privacyFields !== mode;
+}
+byId('privacy-mode').addEventListener('change', privacyFields);
+for (const form of document.querySelectorAll('form')) form.addEventListener('input', () => { form.dataset.dirty = 'true'; });
+window.addEventListener('beforeunload', event => {
+  if (document.querySelector('form[data-dirty="true"]')) { event.preventDefault(); event.returnValue = ''; }
+});
 
 async function api(path, data) {
   const response = await fetch('/api/' + path, {
@@ -20,9 +49,14 @@ async function api(path, data) {
 }
 
 function busy(element, action) {
+  const label = element.textContent;
   element.disabled = true;
-  Promise.resolve().then(action).catch(error => message(error.message))
-    .finally(() => { element.disabled = false; });
+  element.setAttribute('aria-busy', 'true');
+  element.textContent = 'Working…';
+  Promise.resolve().then(action).then(() => {
+    const form = element.closest('form'); if (form) delete form.dataset.dirty;
+  }).catch(error => message(error.message, true))
+    .finally(() => { element.disabled = false; element.removeAttribute('aria-busy'); element.textContent = label; });
 }
 
 function signedIn(result) {
@@ -30,6 +64,8 @@ function signedIn(result) {
   show('login', false);
   show('setup', result.setup_required);
   show('panel', !result.setup_required);
+  document.body.dataset.signedIn = String(!result.setup_required);
+  selectView();
   filteringLoaded = false;
   updatesLoaded = false;
 }
@@ -50,12 +86,15 @@ for (const id of ['setup-form', 'settings-form']) {
     event.preventDefault();
     busy(event.submitter, async () => {
       const data = Object.fromEntries(new FormData(event.target));
-      if (data.admin_password !== data.confirmation) throw new Error('Administrator passwords do not match.');
+      if (data.admin_password !== data.confirmation) {
+        event.target.elements.confirmation.focus(); throw new Error('Passwords do not match. Re-enter the administrator password.');
+      }
       delete data.confirmation;
       const result = await api(id === 'setup-form' ? 'setup' : 'settings', data);
       event.target.reset();
       csrf = '';
       show('panel', false); show('setup', false); show('login', true);
+      document.body.dataset.signedIn = 'false';
       message('Saved. Join “' + result.ssid + '” with your new Wi-Fi passphrase, then sign in with your new administrator password.');
     });
   });
@@ -112,8 +151,9 @@ byId('saved').addEventListener('click', event => busy(event.target, async () => 
   }
 }));
 
-byId('logout').addEventListener('click', event => busy(event.target, async () => {
+for (const id of ['logout', 'mobile-logout']) byId(id).addEventListener('click', event => busy(event.target, async () => {
   await api('logout', {}); csrf = ''; show('panel', false); show('setup', false); show('login', true);
+  document.body.dataset.signedIn = 'false';
 }));
 
 byId('dns-form').addEventListener('submit', event => {
@@ -208,12 +248,13 @@ const formatBytes = value => value > 1048576 ? (value / 1048576).toFixed(1) + ' 
 async function metrics() {
   if (!csrf || byId('panel').hidden) return;
   const current = await api('metrics');
+  byId('flow-clients').textContent = current.clients.length + (current.clients.length === 1 ? ' connected device' : ' connected devices');
   byId('metrics').replaceChildren();
   const used = 100 * (1 - current.memory.available_bytes / current.memory.total_bytes);
   for (const [label, value] of [['Uptime', (current.uptime_seconds / 3600).toFixed(1) + ' h'],
     ['Memory used', used.toFixed(0) + '%'], ['Load (1 min)', current.load_average[0].toFixed(2)],
     ['Temperature', current.temperature_c === null ? 'N/A' : current.temperature_c.toFixed(1) + ' °C'],
-    ['DNS queries', current.dns['total.num.queries'] ?? 'N/A'], ['DNS cache hits', current.dns['total.num.cachehits'] ?? 'N/A']]) {
+    ['DNS queries', current.dns['total.num.queries'] ?? '—'], ['Cache hits', current.dns['total.num.cachehits'] ?? '—']]) {
     const tile = document.createElement('div'); const title = document.createElement('small'); title.textContent = label;
     const number = document.createElement('strong'); number.textContent = value; tile.append(title, number); byId('metrics').append(tile);
   }
@@ -237,6 +278,7 @@ async function metrics() {
 
 async function status() {
   const info = await api('status');
+  byId('state').dataset.state = info.state;
   byId('state').textContent = ({online: 'Internet connected', captive: 'Public Wi-Fi sign-in required', offline: 'Offline · setup available'})[info.state];
   byId('summary').textContent = info.state === 'captive'
     ? 'Your upstream network needs a sign-in. Open a plain HTTP page in another tab to finish its login.'
@@ -250,6 +292,12 @@ async function status() {
     byId('details').append(key, text);
   }
   byId('hardware').textContent = info.hardware_note || info.last_error || '';
+  byId('flow-upstream').textContent = info.state === 'online' ? 'Internet' : info.state === 'captive' ? 'Sign-in needed' : 'No upstream';
+  byId('flow-state').textContent = info.state === 'online' ? 'Connection verified' : info.state === 'captive' ? 'Open public sign-in' : 'Choose a connection';
+  byId('overview-privacy').textContent = info.privacy_mode === 'direct' ? 'Direct (no tunnel)' : info.privacy_mode || '—';
+  byId('overview-dns').textContent = info.dns_mode === 'recursive' ? 'Recursive + DNSSEC' : 'DNS-over-TLS';
+  byId('overview-firewall').textContent = info.firewall ? 'Active' : 'Starting';
+  byId('overview-filter').textContent = info.filtering && Object.keys(info.filtering.metadata.sources).length ? 'Lists loaded' : 'Waiting for lists';
   if (info.updates) {
     byId('update-status').textContent = info.updates.message + (info.updates.busy ? ' · Working…' : '') + (info.updates.reboot_required ? ' · Reboot required.' : '');
     if (!updatesLoaded) {
@@ -272,12 +320,13 @@ async function status() {
   byId('privacy-status').textContent = info.privacy_mode === 'direct'
     ? 'Direct mode: the firewall is active; no VPN or proxy protects your connection.'
     : info.privacy_mode + ': kill-switch enabled. ' + (info.tunnel_ready && info.state === 'online' ? 'Protected connection verified.' : 'Waiting for a verified tunnel; direct client access is blocked.');
-  if (!byId('panel').contains(document.activeElement)) {
+  if (!byId('panel').contains(document.activeElement) && !document.querySelector('#panel form[data-dirty="true"]')) {
     byId('settings-form').elements.ssid.value = info.ssid || '';
     byId('settings-form').elements.country.value = info.country === '00' ? '' : info.country || '';
     byId('dns-form').elements.mode.value = info.dns_mode || 'dot';
     byId('privacy-form').elements.mode.value = info.privacy_mode || 'direct';
   }
+  privacyFields();
 }
 
 api('session').then(result => { signedIn(result); return status(); }).catch(() => {});
