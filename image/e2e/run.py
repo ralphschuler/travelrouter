@@ -11,13 +11,16 @@ import gzip
 import hashlib
 import json
 import os
+import pty
 import re
 import secrets
 import select
+import shlex
 import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -87,11 +90,22 @@ def prepare_emulated_dtb(dtb, report):
 
 
 class Console:
-    def __init__(self, command, logfile):
+    def __init__(self, command, logfile, terminal=False):
         self.log = logfile.open('wb')
-        # QEMU is isolated software emulation, with no host network or device access.
-        self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,  # nosec B603
-                                        stderr=subprocess.STDOUT, bufsize=0)
+        if terminal:
+            # Fast native-Alpine preflight: reproduce the guest's TTY input with
+            # the exact installed ash before paying for a full software boot.
+            master, slave = pty.openpty()
+            try:
+                self.process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave)  # nosec B603
+            finally:
+                os.close(slave)
+            self.process.stdin = os.fdopen(os.dup(master), 'wb', buffering=0)
+            self.process.stdout = os.fdopen(master, 'rb', buffering=0)
+        else:
+            # QEMU has no host network or device access.
+            self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,  # nosec B603
+                                            stderr=subprocess.STDOUT, bufsize=0)
         self.buffer = b''
         self.ready = False
 
@@ -140,8 +154,9 @@ class Console:
 
     def boot(self):
         self.expect(BOOT_READY, 900, error_patterns=BOOT_ERRORS)
-        # The explicit +i init argument avoids ash's terminal line editor. Even
-        # -s auto-enables it on a TTY; cursor queries can corrupt queued commands.
+        # A script filename avoids ash's terminal line editor: -s auto-enables
+        # it on a TTY, and ash treats +i exactly like -i. The proc fd path keeps
+        # reading this same serial channel in noninteractive script mode.
         # Input queues while the unchanged initramfs finishes switch_root.
         self.command("stty -echo; case $- in *i*) echo 'Expected noninteractive CI shell'; exit 1;; esac", timeout=30)
         self.ready = True
@@ -160,11 +175,12 @@ class Console:
                                + output.decode(errors='replace')[-3000:])
         return output.decode(errors='replace')
 
-    def upload(self, path):
+    def upload(self, path, directory=REMOTE):
         content = base64.b64encode(path.read_bytes()).decode()
         lines = '\n'.join(content[position:position + 512] for position in range(0, len(content), 512))
         delimiter = 'CI_FILE_' + secrets.token_hex(8)
-        self.command(f"base64 -d > {REMOTE}/{path.name} <<'{delimiter}'\n{lines}\n{delimiter}", timeout=30)
+        destination = shlex.quote(f'{directory}/{path.name}')
+        self.command(f"base64 -d > {destination} <<'{delimiter}'\n{lines}\n{delimiter}", timeout=30)
 
     def diagnostics(self, output):
         if not self.ready or self.process.poll() is not None:
@@ -195,6 +211,27 @@ class Console:
                 self.process.kill()
                 self.process.wait(timeout=5)
         self.log.close()
+        self.process.stdin.close()
+        self.process.stdout.close()
+
+
+def verify_console_protocol(output):
+    """Prove noninteractive ash and multiline uploads over a real PTY first."""
+    with tempfile.TemporaryDirectory(prefix='console-preflight-', dir=output) as temporary:
+        directory = Path(temporary)
+        source = directory / 'probe.bin'
+        source.write_bytes(bytes(range(256)) * 80)
+        destination = directory / 'received'
+        destination.mkdir()
+        console = Console(['/bin/sh', '/proc/self/fd/0'], output / 'console-protocol.log', terminal=True)
+        try:
+            console.command('stty -echo; case $- in *i*) exit 1;; esac', timeout=10)
+            console.upload(source, directory=destination)
+            require((destination / source.name).read_bytes() == source.read_bytes(),
+                    'Native Alpine serial upload preflight changed bytes')
+        finally:
+            console.close()
+    print('Serial protocol preflight passed: native ash, noninteractive TTY and multiline binary upload', flush=True)
 
 
 def run(args, report):
@@ -202,6 +239,7 @@ def run(args, report):
     require(source.is_file() and source.name.endswith('.img.gz'), 'Expected a built regular .img.gz file')
     args.output.mkdir(parents=True, exist_ok=True)
     args.scratch.mkdir(parents=True, exist_ok=True)
+    verify_console_protocol(args.output)
     qemu, qemu_img, mcopy = (executable(name) for name in ('qemu-system-aarch64', 'qemu-img', 'mcopy'))
     report['qemu'] = host_command([qemu, '--version']).splitlines()[0]
     require('raspi4b' in host_command([qemu, '-machine', 'help']), 'QEMU must support raspi4b')
@@ -234,7 +272,7 @@ def run(args, report):
                '-dtb', str(args.scratch / 'board.dtb'), '-drive', f'file={overlay},if=sd,format=qcow2',
                '-append', 'earlycon=pl011,mmio32,0xfe201000 console=ttyAMA1,115200 '
                           'modules=loop,squashfs,sd-mod,usb-storage '
-                          'init=/bin/sh init_args=+i rootflags=size=1536M']
+                          'init=/bin/sh init_args=/proc/self/fd/0 rootflags=size=1536M']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
                           'CI init shell, DTB RAM-bank/serial-console declarations and mac80211_hwsim radios. '
                           'No CM5 firmware, RP1 or physical radio qualification.')

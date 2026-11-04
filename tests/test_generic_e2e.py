@@ -27,7 +27,7 @@ class GenericBootConfigTests(unittest.TestCase):
                 self.assertIn("menuentry 'TravelRouter (UEFI)'", result)
                 self.assertIn('linux /boot/vmlinuz-lts modules=loop,squashfs', result)
                 self.assertIn('initrd /boot/initramfs-lts', result)
-                self.assertIn(f'console={console},115200 init=/bin/sh init_args=+i', result)
+                self.assertIn(f'console={console},115200 init=/bin/sh init_args=/proc/self/fd/0', result)
                 self.assertNotIn('console=tty0', result)
                 self.assertNotIn('quiet', result)
                 self.assertNotIn('gfxterm', result)

@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from run import BOOT_ERRORS, BOOT_READY, HERE, REMOTE, Console, executable, expand_image, require
+from run import BOOT_ERRORS, BOOT_READY, HERE, REMOTE, Console, executable, expand_image, require, verify_console_protocol
 
 
 def checked(arguments):
@@ -51,7 +51,7 @@ def instrument_grub(text, architecture):
             parts = [part for part in parts if part != 'quiet' and not
                      part.startswith(('console=', 'init=', 'init_args=', 'rootflags='))]
             line = '    ' + ' '.join(parts + [f'console={console},115200', 'init=/bin/sh',
-                                             'init_args=+i', 'rootflags=size=1536M'])
+                                             'init_args=/proc/self/fd/0', 'rootflags=size=1536M'])
             entries += 1
         result.append(line)
     require(entries > 0, 'No Linux boot entry found in the shipped GRUB configuration')
@@ -188,6 +188,7 @@ def run(args, report):
     require(architecture in {'x86_64', 'aarch64'}, 'Unsupported generic test target')
     require(not args.scratch.exists(), 'Use a fresh generic E2E scratch directory')
     args.scratch.mkdir(parents=True)
+    verify_console_protocol(args.output)
     report['qemu'] = checked([executable('qemu-system-' + architecture), '--version']).splitlines()[0]
     image = args.dist / f'travelrouter-{args.target}.img.gz'
     require(image.is_file(), 'Expected built runtime .img.gz')
@@ -195,7 +196,7 @@ def run(args, report):
     report['archive_sha256'], report['image_sha256'] = expand_image(image, raw)
     report['image_bytes'] = raw.stat().st_size
     report['boundary'] = ('Actual UEFI and GRUB boot of copied installer ISO and installed runtime. '
-                          'Only copied GRUB configs gain serial/+i init-shell arguments; all bootloader code, '
+                          'Only copied GRUB configs gain serial/script-mode init arguments; all bootloader code, '
                           'kernels, initramfs, APKs and installer/application payloads remain shipped bytes. '
                           'Runtime uses mac80211_hwsim radios, not physical hardware qualification.')
     installed = install(args, architecture, report['image_bytes'], report['image_sha256'], report)
