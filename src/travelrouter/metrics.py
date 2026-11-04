@@ -52,7 +52,8 @@ def snapshot(interfaces):
 
 
 def logs():
-    files = {'router': '/var/log/travelrouter.log', 'proxy': '/var/log/travelrouter-proxy.log'}
+    files = {'router': '/var/log/travelrouter.log', 'proxy': '/var/log/travelrouter-proxy.log',
+             'dns': '/var/log/travelrouter-dns.log'}
     result = {}
     for name, filename in files.items():
         path = Path(filename)

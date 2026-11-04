@@ -1,0 +1,4 @@
+# Keep early bind/TLS errors emitted before Unbound opens syslog available.
+# These files use the existing bounded TravelRouter log rotation policy.
+output_log=/var/log/travelrouter-dns.log
+error_log=/var/log/travelrouter-dns.log

@@ -99,6 +99,10 @@ def _overlay_filter(info):
 
 
 def initialize(store):
+    # Local DNS binds before NetworkManager finishes its asynchronous startup.
+    # Establish the loopback address explicitly rather than depend on that race.
+    command(['/sbin/ip', 'address', 'replace', '127.0.0.1/8', 'dev', 'lo'])
+    command(['/sbin/ip', 'link', 'set', 'lo', 'up'])
     RUN.mkdir(parents=True, exist_ok=True, mode=0o755)
     unbound_run = Path('/run/unbound')
     unbound_run.mkdir(parents=True, exist_ok=True)
