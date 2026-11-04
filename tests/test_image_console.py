@@ -26,6 +26,24 @@ class ImageConsoleTests(unittest.TestCase):
                 self.assertIsNotNone(re.search(HARNESS.SHELL_PROMPT, text, re.MULTILINE))
         self.assertIsNone(re.search(HARNESS.SHELL_PROMPT, b'not a shell / # ', re.MULTILINE))
 
+    def test_switch_root_recovery_prompt_is_not_successful_boot(self):
+        # Captured from CI run 41830943569: a recovery shell printed a prompt
+        # after the serial device failed to open, but could not accept input.
+        console = HARNESS.Console.__new__(HARNESS.Console)
+        console.buffer = (b"switch_root: can't open '/dev/ttyAMA1': No such file or directory\r\n"
+                          b"/bin/sh: can't access tty; job control turned off\r\n~ # \x1b[6n")
+        with self.assertRaisesRegex(RuntimeError, 'Guest boot failed'):
+            console.expect(HARNESS.SHELL_PROMPT, 1, error_patterns=HARNESS.BOOT_ERRORS)
+
+    def test_ash_cursor_query_is_answered_before_accepting_prompt(self):
+        console = HARNESS.Console.__new__(HARNESS.Console)
+        console.buffer = b'\r\n/ # \x1b[6n'
+        replies = []
+        console.send = replies.append
+        output, _ = console.expect(HARNESS.SHELL_PROMPT, 1, error_patterns=HARNESS.BOOT_ERRORS)
+        self.assertEqual(replies, ['\x1b[1;5R'])
+        self.assertEqual(output, b'\r\n/ # ')
+
 
 if __name__ == '__main__':
     unittest.main()

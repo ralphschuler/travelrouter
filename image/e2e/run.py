@@ -24,6 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REMOTE = '/root/ci-image-test'
 SHELL_PROMPT = rb'(?:^|\r?\n)(?:/|~) # $'
+BOOT_ERRORS = (b"switch_root: can't open", b"switch_root: can't execute")
 
 
 def require(condition, message):
@@ -60,8 +61,8 @@ def expand_image(source, target):
     return compressed_hash.hexdigest(), digest.hexdigest()
 
 
-def declare_emulated_ram(dtb, report):
-    """Work around QEMU 11.0.3 omitting raspi4b's allocated upper RAM bank."""
+def prepare_emulated_dtb(dtb, report):
+    """Declare QEMU RAM and free its serial console from absent Bluetooth."""
     fdtget, fdtput = executable('fdtget'), executable('fdtput')
     for property_name, expected in [('#address-cells', '2'), ('#size-cells', '1')]:
         actual = host_command([fdtget, '-t', 'x', str(dtb), '/', property_name]).strip()
@@ -77,8 +78,12 @@ def declare_emulated_ram(dtb, report):
     host_command([fdtput, '-c', str(dtb), node])
     host_command([fdtput, '-t', 's', str(dtb), node, 'device_type', 'memory'])
     host_command([fdtput, '-t', 'x', str(dtb), node, 'reg', '0', '40000000', '40000000'])
+    # A Bluetooth serdev child otherwise claims PL011 and suppresses its tty
+    # character device. QEMU has no Bluetooth device; free this test console.
+    host_command([fdtput, '-t', 's', str(dtb), '/soc/serial@7e201000/bluetooth', 'status', 'disabled'])
     report['test_dtb_sha256'] = hashlib.sha256(dtb.read_bytes()).hexdigest()
-    report['dtb_fixup'] = 'Declare QEMU upper 1 GiB RAM bank at 0x40000000; preserve low VideoCore reservation'
+    report['dtb_fixup'] = ('Declare QEMU upper 1 GiB RAM bank at 0x40000000; preserve low VideoCore reservation; '
+                           'disable absent Bluetooth serdev child to expose ttyAMA1 console')
 
 
 class Console:
@@ -95,7 +100,7 @@ class Console:
         self.process.stdin.write(text.encode())
         self.process.stdin.flush()
 
-    def expect(self, pattern, timeout):
+    def expect(self, pattern, timeout, error_patterns=()):
         started = time.monotonic()
         deadline = started + timeout
         progress_at = started + 30
@@ -108,6 +113,15 @@ class Console:
                 progress_at = time.monotonic() + 30
             if b'Kernel panic - not syncing' in self.buffer:
                 raise RuntimeError('Guest kernel panic; see console.log for the complete boot trace')
+            for error in error_patterns:
+                if error in self.buffer:
+                    raise RuntimeError('Guest boot failed before the test shell: ' + error.decode())
+            # BusyBox ash asks the terminal for its cursor position after the
+            # four-column root prompt. Answer its real terminal handshake; keep
+            # the raw escape sequence in console.log, outside prompt matching.
+            if b'\x1b[6n' in self.buffer:
+                self.send('\x1b[1;5R')
+                self.buffer = self.buffer.replace(b'\x1b[6n', b'')
             match = compiled.search(self.buffer)
             if match:
                 output = self.buffer[:match.end()]
@@ -131,7 +145,7 @@ class Console:
         raise TimeoutError(f'Guest did not reach expected state within {timeout} seconds')
 
     def boot(self):
-        self.expect(SHELL_PROMPT, 900)
+        self.expect(SHELL_PROMPT, 900, error_patterns=BOOT_ERRORS)
         self.ready = True
         self.command('stty -echo', timeout=10)
         self.command(f'mkdir -p {REMOTE}; chmod 700 {REMOTE}', timeout=10)
@@ -206,7 +220,7 @@ def run(args, report):
                                      ('bcm2711-rpi-4-b.dtb', 'board.dtb')]:
         host_command([mcopy, '-o', '-i', f'{raw}@@{offset}', f'::/{source_path}',
                       str(args.scratch / destination)])
-    declare_emulated_ram(args.scratch / 'board.dtb', report)
+    prepare_emulated_dtb(args.scratch / 'board.dtb', report)
     kernel = args.scratch / 'kernel'
     if kernel.read_bytes()[:2] == b'\x1f\x8b':
         kernel.write_bytes(gzip.decompress(kernel.read_bytes()))
@@ -225,7 +239,7 @@ def run(args, report):
                           'modules=loop,squashfs,sd-mod,usb-storage '
                           'init=/bin/sh init_args=-i rootflags=size=1536M']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
-                          'CI init shell, DTB RAM-bank declaration and mac80211_hwsim radios. '
+                          'CI init shell, DTB RAM-bank/serial-console declarations and mac80211_hwsim radios. '
                           'No CM5 firmware, RP1 or physical radio qualification.')
     for phase in ('initial', 'restored'):
         report['stage'] = phase + ': boot'
