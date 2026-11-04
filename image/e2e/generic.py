@@ -7,12 +7,15 @@ shell. Installer payload, kernels, initramfs, packages and application are exact
 import argparse
 import hashlib
 import json
+import os
 import re
 import secrets
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -49,13 +52,59 @@ def instrument_grub(text, architecture):
         if re.match(r'\s*linux(?:efi)?\s+', line):
             parts = line.split()
             parts = [part for part in parts if part != 'quiet' and not
-                     part.startswith(('console=', 'init=', 'init_args=', 'rootflags='))]
+                     part.startswith(('console=', 'init=', 'init_args='))]
             line = '    ' + ' '.join(parts + [f'console={console},115200', 'init=/bin/sh',
-                                             'init_args=/proc/self/fd/0', 'rootflags=size=1536M'])
+                                             'init_args=/proc/self/fd/0'])
             entries += 1
         result.append(line)
     require(entries > 0, 'No Linux boot entry found in the shipped GRUB configuration')
     return '\n'.join(result) + '\n'
+
+
+def installer_session(path, marker):
+    # Keep the controlling-terminal session leader alive after the installer
+    # child exits. Otherwise its TTY hangup can kill the CI PID1 shell. The host
+    # terminates this disposable VM after the synced status marker is received.
+    script = (f'sh {shlex.quote(str(path))}; result=$?; sync; '
+              f"printf '\\n{marker}:%s:%s\\n' \"$result\" \"$$\"; "
+              'while :; do sleep 60; done')
+    return 'setsid -c sh -c ' + shlex.quote(script) + '\n'
+
+
+def verify_installer_session(output):
+    """Check the exact session lifetime using native Alpine and a harmless child."""
+    with tempfile.TemporaryDirectory(prefix='installer-preflight-', dir=output) as temporary:
+        script = Path(temporary) / 'installer.sh'
+        script.write_text('#!/bin/sh\nprintf "Native installer consent:" >/dev/tty\n'
+                          'read -r confirmation </dev/tty\n'
+                          '[ "$confirmation" = "CI harmless child" ] || exit 1\n'
+                          'printf "Installer child completed\\n"\nexit 0\n')
+        console = Console(['/bin/sh', '/proc/self/fd/0'], output / 'installer-protocol.log', terminal=True)
+        child_pid = None
+        try:
+            console.command('stty -echo; case $- in *i*) exit 1;; esac', timeout=10)
+            marker = 'CI_SESSION_' + secrets.token_hex(8)
+            console.send(installer_session(script, marker))
+            console.expect(rb'Native installer consent:', 10, error_patterns=(marker.encode(),))
+            console.send('CI harmless child\n')
+            _, match = console.expect((r'^' + marker + r':([0-9]+):([0-9]+)\r?$').encode(), 15)
+            reported_pid = int(match.group(2))
+            require(int(match.group(1)) == 0, 'Installer session preflight child failed')
+            require(reported_pid > 1 and reported_pid != console.process.pid
+                    and os.getsid(reported_pid) == reported_pid and os.getpgid(reported_pid) == reported_pid,
+                    'Installer preflight did not establish its own controlling-terminal session')
+            child_pid = reported_pid
+            require(console.process.poll() is None, 'Installer exit terminated the parent serial shell')
+        finally:
+            if child_pid is not None:
+                # This PID came from our fixed native dummy script, never a VM
+                # or installer payload; kill only its newly owned session group.
+                try:
+                    os.killpg(child_pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            console.close()
+    print('Installer session preflight passed: child exit preserves the parent serial shell', flush=True)
 
 
 def machine_command(architecture, firmware_variables, disk, installer_iso=None):
@@ -114,29 +163,20 @@ def install(args, architecture, image_bytes, image_hash, report):
                                  "test \"$#\" -eq 1 && test -f \"$1\" && printf 'CI_INSTALLER:%s\\n' \"$1\"")
         path = re.search(r'^CI_INSTALLER:(/media/[^\r\n]+/travelrouter/install\.sh)\r?$', result, re.MULTILINE)
         require(path is not None, 'Could not uniquely locate the shipped installer payload')
+        (output / 'devices-before-install.txt').write_text(console.command('cat /proc/partitions; mount'))
         marker = 'CI_INSTALL_EXIT_' + secrets.token_hex(8)
-        # The installer intentionally reads consent from /dev/tty. A CI PID1
-        # shell has no controlling terminal, so give only its installer child
-        # the same dedicated serial TTY a normal local login would provide.
-        console.send(f"setsid -c sh {shlex.quote(path.group(1))}; result=$?; "
-                     f"printf '\\n{marker}:%s\\n' \"$result\"\n")
+        console.send(installer_session(path.group(1), marker))
         console.expect(rb'Type the whole target disk path, or press Enter to cancel:', 900,
                        error_patterns=(marker.encode(),))
         console.send('/dev/vda\n')
         console.expect(rb'Type exactly ERASE /dev/vda to continue:', 60, error_patterns=(marker.encode(),))
         console.send('ERASE /dev/vda\n')
         report['stage'] = 'UEFI installer: actual write and complete readback'
-        output_text, status = console.expect((r'^' + marker + r':([0-9]+)\r?$').encode(), 900)
+        output_text, status = console.expect((r'^' + marker + r':([0-9]+):([0-9]+)\r?$').encode(), 900)
         require(int(status.group(1)) == 0, 'Shipped installer failed; see installer console')
         require(b'Installation and full readback verification succeeded: /dev/vda' in output_text,
                 'Installer did not report complete image readback verification')
-        console.command('sync', timeout=30)
     finally:
-        if console.ready:
-            try:
-                (output / 'devices.txt').write_text(console.command('cat /proc/partitions; mount', check=False))
-            except (OSError, RuntimeError, TimeoutError):
-                pass
         console.close()
     raw = args.scratch / 'installed.raw'
     checked([executable('qemu-img'), 'convert', '-f', 'qcow2', '-O', 'raw', str(disk), str(raw)])
@@ -189,6 +229,7 @@ def run(args, report):
     require(not args.scratch.exists(), 'Use a fresh generic E2E scratch directory')
     args.scratch.mkdir(parents=True)
     verify_console_protocol(args.output)
+    verify_installer_session(args.output)
     report['qemu'] = checked([executable('qemu-system-' + architecture), '--version']).splitlines()[0]
     image = args.dist / f'travelrouter-{args.target}.img.gz'
     require(image.is_file(), 'Expected built runtime .img.gz')

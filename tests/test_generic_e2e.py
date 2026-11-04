@@ -31,7 +31,14 @@ class GenericBootConfigTests(unittest.TestCase):
                 self.assertNotIn('console=tty0', result)
                 self.assertNotIn('quiet', result)
                 self.assertNotIn('gfxterm', result)
+                self.assertNotIn('rootflags=', result)
                 self.assertEqual(result.count('set timeout='), 1)
+
+    def test_preserves_production_root_filesystem_sizing(self):
+        source = 'linux /boot/vmlinuz-lts rootflags=size=768M modules=loop,squashfs\n'
+        result = GENERIC.instrument_grub(source, 'aarch64')
+        self.assertIn('rootflags=size=768M', result)
+        self.assertEqual(result.count('rootflags='), 1)
 
     def test_refuses_unknown_boot_configuration(self):
         with self.assertRaisesRegex(RuntimeError, 'No Linux boot entry'):

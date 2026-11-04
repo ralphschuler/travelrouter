@@ -187,6 +187,7 @@ class Console:
             return
         commands = {
             'services.txt': 'rc-status -a',
+            'capacity.txt': 'df -h; free -m; cat /proc/mounts /proc/meminfo',
             'processes.txt': 'ps -ef; ls -l /run/unbound* /run/travelrouter/',
             'service-definitions.txt': 'cat /etc/init.d/unbound /etc/conf.d/unbound /etc/init.d/travelrouter',
             'interfaces.txt': 'ip -details address; ip route; iw dev',
@@ -282,7 +283,7 @@ def run(args, report):
                '-dtb', str(args.scratch / 'board.dtb'), '-drive', f'file={overlay},if=sd,format=qcow2',
                '-append', 'earlycon=pl011,mmio32,0xfe201000 console=ttyAMA1,115200 '
                           'modules=loop,squashfs,sd-mod,usb-storage '
-                          'init=/bin/sh init_args=/proc/self/fd/0 rootflags=size=1536M']
+                          'init=/bin/sh init_args=/proc/self/fd/0']
     report['boundary'] = ('Shipped RPi kernel/initramfs and image packages/apkovl on QEMU raspi4b; '
                           'CI init shell, DTB RAM-bank/serial-console declarations and mac80211_hwsim radios. '
                           'No CM5 firmware, RP1 or physical radio qualification.')
