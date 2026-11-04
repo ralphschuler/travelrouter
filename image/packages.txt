@@ -16,6 +16,7 @@ hostapd-openrc
 iproute2
 iw
 linux-firmware
+libimobiledevice-progs
 logrotate
 networkmanager
 networkmanager-cli
@@ -31,5 +32,7 @@ util-linux-misc
 sing-box
 unbound
 unbound-openrc
+usbmuxd
+usbmuxd-udev
 wpa_supplicant
 wireguard-tools

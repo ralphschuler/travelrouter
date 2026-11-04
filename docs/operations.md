@@ -97,5 +97,19 @@ then connect with `ssh -i ~/.ssh/travelrouter root@10.42.0.1`. Disable developer
 when finished. SSH keys and host identity are specific to the router and are
 not exported in settings backups.
 
+## USB tethering
+
+Connect a phone to a USB host port using a data-capable cable. Enable USB
+tethering on Android; on iPhone enable Personal Hotspot, unlock the device and
+accept the Trust prompt. In **Connections → USB tethering**, refresh the device
+list and connect the detected USB network. The active-upstream label reflects
+the current route; mobile data charges can apply. The router keeps its normal
+firewall and selected VPN/proxy policy for this upstream.
+
+iPhone pairing records are held in volatile storage and are not included in
+settings backups. A reboot can require the Trust step again. Pairing and actual
+mobile data connectivity depend on the phone and carrier and must be tested on
+physical hardware.
+
 The first release has not been qualified for unattended deployment. Validate the
 hardware checklist, including reboot persistence and a VPN outage, before travel.

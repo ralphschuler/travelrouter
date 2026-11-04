@@ -22,6 +22,7 @@ from .network import Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
 from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
+from .tether import discover_usb_networks, pair_iphone, perform_usb_action
 from .updates import Updates
 
 LOG = logging.getLogger(__name__)
@@ -475,6 +476,15 @@ class System:
 
     def scan(self):
         return self.network.scan()
+
+    def usb_networks(self):
+        return {'devices': discover_usb_networks(), 'active': self.wan}
+
+    def usb_network_action(self, data):
+        if data.get('action') == 'pair-iphone':
+            pair_iphone()
+        else:
+            perform_usb_action(self.network, data.get('action'), data.get('interface'))
 
     def connect(self, **data):
         self.ensure_no_pending_update()
