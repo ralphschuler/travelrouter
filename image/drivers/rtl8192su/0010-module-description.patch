@@ -1,0 +1,14 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] add module metadata for security scanners
+
+Describe the experimental driver in the generated kernel module metadata.
+
+---
+--- a/usb.c
++++ b/usb.c
+@@ -1,4 +1,5 @@
+ MODULE_DEVICE_TABLE(usb, r92su_usb_product_ids);
+ MODULE_FIRMWARE(RTL8192SU_FIRMWARE);
++MODULE_DESCRIPTION("Experimental Realtek RTL8191SU USB Wi-Fi driver");
+ MODULE_AUTHOR("Christian Lamparter <chunkeey@googlemail.com>");
+ MODULE_LICENSE("GPL");

@@ -13,49 +13,45 @@ permissions:
 
 jobs:
   build-driver:
-    name: Build mac80211 driver against Linux 6.18.58
-    runs-on: ubuntu-24.04
+    name: Build module against Alpine CM5 kernel headers
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     env:
       DRIVER_REVISION: 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9
-      KERNEL_VERSION: 6.18.58
+      KERNEL_RELEASE: 6.18.58-0-rpi
     steps:
       - name: Check out TravelRouter compatibility patches
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Install kernel build dependencies
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bc bison build-essential flex libelf-dev libssl-dev
-      - name: Download and verify Linux source
+      - name: Build r92su against Alpine's exact Raspberry Pi kernel headers
         run: |
-          mkdir -p build
-          curl --fail --location --retry 3 \
-            "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz" \
-            -o "build/linux-${KERNEL_VERSION}.tar.xz"
-          printf '%s  %s\n' \
-            069b19f9032c4dac8149ae4b6520c35debca0f42a9f6d52ee55ba6ca9b818013 \
-            "build/linux-${KERNEL_VERSION}.tar.xz" | sha256sum --check
-          tar -xJf "build/linux-${KERNEL_VERSION}.tar.xz" -C build
-      - name: Fetch the pinned mac80211 driver source
-        run: |
-          git clone --filter=blob:none https://github.com/chunkeey/rtl8192su.git build/rtl8192su
-          git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
-          test "$(git -C build/rtl8192su rev-parse HEAD)" = "$DRIVER_REVISION"
-      - name: Apply maintained Linux API compatibility patch
-        run: |
-          for patch_file in image/drivers/rtl8192su/*.patch; do
-            patch --directory=build/rtl8192su/r92su -p1 < "$patch_file"
-          done
-      - name: Prepare Linux 6.18.58 headers
-        run: |
-          kernel="$GITHUB_WORKSPACE/build/linux-${KERNEL_VERSION}"
-          make -C "$kernel" defconfig
-          "$kernel/scripts/config" --file "$kernel/.config" \
-            --enable WLAN --enable USB_SUPPORT --enable USB \
-            --module CFG80211 --module MAC80211 --module FW_LOADER
-          make -C "$kernel" olddefconfig
-          make -C "$kernel" -j2 modules_prepare
-      - name: Compile r92su for RTL8191SU
-        run: |
-          make -C "build/linux-${KERNEL_VERSION}" \
-            M="$GITHUB_WORKSPACE/build/rtl8192su/r92su" \
-            CONFIG_R92SU=m modules
-          test -s build/rtl8192su/r92su/r92su.ko
+          docker run --rm --platform linux/arm64 \
+            -e DRIVER_REVISION -e KERNEL_RELEASE \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a \
+            sh -eu -c '
+              apk add --no-cache build-base git kmod linux-rpi-dev patch
+              kernel_dir="/usr/src/linux-headers-${KERNEL_RELEASE}"
+              test -d "$kernel_dir"
+              test -s "$kernel_dir/Module.symvers"
+              mkdir -p build
+              git clone --filter=blob:none https://github.com/chunkeey/rtl8192su.git build/rtl8192su
+              git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
+              test "$(git -C build/rtl8192su rev-parse HEAD)" = "$DRIVER_REVISION"
+              for patch_file in image/drivers/rtl8192su/*.patch; do
+                patch --directory=build/rtl8192su/r92su -p1 < "$patch_file"
+              done
+              make -C "$kernel_dir" \
+                M="$PWD/build/rtl8192su/r92su" ARCH=arm64 CONFIG_R92SU=m modules
+              module=build/rtl8192su/r92su/r92su.ko
+              test -s "$module"
+              vermagic=$(modinfo -F vermagic "$module")
+              case "$vermagic" in "$KERNEL_RELEASE "*) ;; *) echo "Unexpected vermagic: $vermagic"; exit 1 ;; esac
+              modinfo -F alias "$module" | grep -F 'usb:v0BDAp8172'
+              test "$(modinfo -F firmware "$module")" = rtlwifi/rtl8712u.bin
+            '
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rtl8191su-r92su-aarch64
+          path: build/rtl8192su/r92su/r92su.ko
+          if-no-files-found: error
+          retention-days: 14
