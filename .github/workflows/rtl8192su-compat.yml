@@ -39,7 +39,10 @@ jobs:
           git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
           test "$(git -C build/rtl8192su rev-parse HEAD)" = "$DRIVER_REVISION"
       - name: Apply maintained Linux API compatibility patch
-        run: patch --directory=build/rtl8192su/r92su -p1 < image/drivers/rtl8192su/0001-linux-unaligned-header.patch
+        run: |
+          for patch_file in image/drivers/rtl8192su/*.patch; do
+            patch --directory=build/rtl8192su/r92su -p1 < "$patch_file"
+          done
       - name: Prepare Linux 6.18.58 headers
         run: |
           kernel="$GITHUB_WORKSPACE/build/linux-${KERNEL_VERSION}"
