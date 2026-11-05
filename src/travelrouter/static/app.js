@@ -161,6 +161,7 @@ byId('connect-form').addEventListener('submit', event => {
   busy(event.submitter, async () => {
     const data = Object.fromEntries(new FormData(event.target));
     data.allow_open = event.target.elements.allow_open.checked;
+    message('Connecting to the upstream network. This may take over a minute.');
     await api('connect', data);
     event.target.elements.password.value = '';
     message('Network saved. Checking Internet access. If a public sign-in is required, open http://neverssl.com in a new tab.');
@@ -178,6 +179,7 @@ byId('saved').addEventListener('click', event => busy(event.target, async () => 
     for (const [label, action] of [['Use', 'activate'], ['Forget', 'forget'], ['Prioritize', 'priority']]) {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
       button.addEventListener('click', () => busy(button, async () => {
+        if (action === 'activate') message('Connecting to the upstream network. This may take over a minute.');
         await api('network', {uuid: item.uuid, action, priority: Math.min(100, item.priority + 10)});
         message('Saved network updated.');
         if (action === 'forget') row.remove();
