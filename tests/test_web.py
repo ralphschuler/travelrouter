@@ -96,6 +96,20 @@ class WebTests(unittest.TestCase):
         self.assertIn('attachment', headers['Content-Disposition'])
         self.assertEqual(headers['Cache-Control'], 'no-store')
 
+    def test_diagnostic_zip_requires_authentication_and_setup(self):
+        self.assertEqual(self.request('/api/diagnostics.zip')[0], 401)
+        self.login()
+        self.assertEqual(self.request('/api/diagnostics.zip')[0], 409)
+        config = self.store.load()
+        config['setup_complete'] = True
+        self.store.save(config)
+        with patch('travelrouter.web.diagnostic_bundle', return_value=b'PK-test'):
+            status, payload, headers = self.request('/api/diagnostics.zip')
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, b'PK-test')
+        self.assertEqual(headers['Content-Type'], 'application/zip')
+        self.assertIn('attachment', headers['Content-Disposition'])
+
     def test_mutation_without_login_is_rejected(self):
         status, _, _ = self.request('/api/connect', {'ssid': 'Hotel', 'password': 'test12345'})
         self.assertEqual(status, 401)
