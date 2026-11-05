@@ -1,0 +1,16 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] mark intentional monitor-mode fallthrough
+
+Make the monitor-mode transition explicit for current kernel warning checks.
+diff --git a/main.c b/main.c
+index 3448707..452b4ca 100644
+--- a/main.c
++++ b/main.c
+@@ -1383,6 +1383,7 @@ static int r92su_init_mac(struct r92su *r92su)
+ 		all_mgmt = true;
+ 		ctrl = true;
+ 		mntr = true;
++		fallthrough;
+ 	case NL80211_IFTYPE_UNSPECIFIED:
+ 		fw_mode = OP_AUTO;
+ 		break;
