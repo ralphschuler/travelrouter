@@ -150,7 +150,8 @@ def initialize(store):
     zones, _ = filtering.rules()
     atomic_write('/etc/unbound/travelrouter-blocks.conf', zones, 0o644)
     command(['/sbin/nft', '-f', '-'], input_text=render_firewall(
-        ap, None, 'offline', config['setup_complete'], developer=config.get('developer_enabled') is True))
+        ap, None, 'offline', config['setup_complete'], developer=config.get('developer_enabled') is True,
+        physical_wan=wan))
     return config
 
 
@@ -283,7 +284,8 @@ class System:
     def restore(self, envelope, password):
         self.ensure_no_pending_update()
         payload = validate_payload(unseal(envelope, password))
-        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
+        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(
+            self.ap, self.wan, 'offline', False, self.privacy.mode, physical_wan=self.network.wan))
         self.privacy.stop()
         old_config = self.store.load()
         paths = list(self.network.profiles.glob('travelrouter-*.nmconnection'))
@@ -330,7 +332,8 @@ class System:
         self.ensure_no_pending_update()
         # Drop forwarding before touching route tables or tunnel processes.
         command(['/sbin/nft', '-f', '-'],
-                input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
+                input_text=render_firewall(
+                    self.ap, self.wan, 'offline', False, self.privacy.mode, physical_wan=self.network.wan))
         self.last_policy = None
         self.privacy.stop()
         mode = self.privacy.prepare(data, self.wan)
@@ -401,13 +404,13 @@ class System:
         resolvers = self.network.resolvers(wan) if effective == 'captive' and wan else []
         dns_mode = config.get('dns_mode', 'dot')
         developer = config.get('developer_enabled') is True
-        key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode, developer,
+        key = (effective, wan, self.network.wan, config['setup_complete'], tuple(resolvers), dns_mode, developer,
                self.privacy.mode, self.filter_revision)
         if key == self.last_policy:
             return
         zones, regions = self.filtering.rules()
         rules = render_firewall(self.ap, wan, effective, config['setup_complete'], self.privacy.mode, regions,
-                                developer=developer)
+                                developer=developer, physical_wan=self.network.wan)
         # Transactional nft replacement must succeed before advertising a new state.
         command(['/sbin/nft', '-f', '-'], input_text=rules)
         zones_path = Path('/etc/unbound/travelrouter-blocks.conf')
