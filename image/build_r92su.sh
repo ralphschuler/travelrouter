@@ -47,6 +47,8 @@ for patch_file in "$source_dir"/image/drivers/rtl8192su/*.patch; do
     patch --batch --directory="$source_path/r92su" -p1 < "$patch_file"
 done
 
+python3 "$source_dir/image/drivers/rtl8192su/check_tx.py" "$source_path/r92su/tx.c"
+
 make -C "$kernel_dir" M="$source_path/r92su" ARCH="$driver_arch" \
     CROSS_COMPILE="$cross_compile" CONFIG_R92SU=m modules
 module="$source_path/r92su/r92su.ko"

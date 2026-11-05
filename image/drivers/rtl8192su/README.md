@@ -22,3 +22,8 @@ needed and run the compatibility workflow. Keep the module out of a release
 image until it passes the CM5 scan, WPA2 association, traffic, unplug/replug,
 and reboot checks. The upstream source is GPL-2.0; preserve its license and
 copyright notices when distributing the built module.
+
+The build also compiles and runs a host-side check against the patched transmit
+code. It checks station broadcast and unicast frames and AP broadcast frames for
+the correct wireless receiver and key. Python 3 and a host C compiler are
+required. This check does not replace testing radio traffic on hardware.

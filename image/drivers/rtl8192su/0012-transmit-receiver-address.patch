@@ -1,0 +1,33 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] select transmit group handling by wireless receiver
+
+In station mode an Ethernet broadcast is sent to the unicast AP receiver.
+Use the 802.11 receiver address for the hardware broadcast flag and key
+selection, so DHCP and other group-destination traffic use the AP pairwise
+key. AP-mode broadcast frames still use the group key.
+
+--- a/tx.c
++++ b/tx.c
+@@ -112,7 +112,7 @@
+ 
+ 	SET_TX_DESC_NON_QOS(hdr, !ieee80211_is_data_qos(i3e->frame_control));
+ 
+-	SET_TX_DESC_BMC(hdr, is_multicast_ether_addr(ieee80211_get_DA(i3e)));
++	SET_TX_DESC_BMC(hdr, is_multicast_ether_addr(i3e->addr1));
+ 
+ 	if (tx_info->key && !tx_info->needs_encrypt) {
+ 		switch (tx_info->key->type) {
+@@ -547,11 +547,11 @@
+ 	if (!ieee80211_is_data_present(hdr->frame_control))
+ 		return TX_CONTINUE;
+ 
+-	if (is_multicast_ether_addr(ieee80211_get_DA(hdr))) {
++	if (is_multicast_ether_addr(hdr->addr1)) {
+ 		key = rcu_dereference(bss_priv->
+ 			group_key[bss_priv->def_multi_key_idx]);
+ 	} else {
+-		sta = r92su_sta_get(r92su, ieee80211_get_DA(hdr));
++		sta = r92su_sta_get(r92su, hdr->addr1);
+ 		if (sta)
+ 			key = rcu_dereference(sta->sta_key);
+ 	}
