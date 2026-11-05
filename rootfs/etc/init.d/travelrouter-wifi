@@ -1,4 +1,6 @@
 #!/sbin/openrc-run
+# OpenRC reads this metadata even though the shell script does not.
+# shellcheck disable=SC2034
 description="Load the experimental RTL8191SU USB Wi-Fi driver"
 
 depend() {
