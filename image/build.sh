@@ -13,11 +13,15 @@ bundle_sha=7bc2ac2ac3bd15667f651dc8d10c8423f1272730f028bc8962384c30e5317f62
 
 [ "$(apk --print-arch)" = aarch64 ] || { echo 'Build requires native or emulated aarch64 Alpine'; exit 1; }
 [ ! -e "$build_dir" ] || { echo 'Use a fresh checkout for each image build'; exit 1; }
-apk add --no-cache curl tar gzip python3 py3-cryptography mtools dosfstools util-linux coreutils
+apk add --no-cache curl tar gzip python3 py3-cryptography mtools dosfstools util-linux coreutils squashfs-tools
 mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
+set -- "$media"/boot/config-*-rpi
+[ "$#" -eq 1 ] && [ -f "$1" ] || { echo 'Missing or ambiguous Raspberry Pi kernel config'; exit 1; }
+[ -f "$media/boot/modloop-rpi" ] || { echo 'Missing Raspberry Pi kernel module loop'; exit 1; }
+python3 "$source_dir/image/wifi_support.py" "$1" "$media/boot/modloop-rpi"
 python3 "$source_dir/image/initramfs_recovery.py" "$media/boot/initramfs-rpi" \
     "$source_dir/rootfs/etc/travelrouter/recovery.sh"
 python3 "$source_dir/image/boot_config.py" cmdline "$media/cmdline.txt"

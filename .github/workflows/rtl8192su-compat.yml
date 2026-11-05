@@ -1,0 +1,53 @@
+name: RTL8191SU driver compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/rtl8192su-compat.yml'
+      - 'docs/wifi-support.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-driver:
+    name: Build mac80211 driver against Linux 6.18.58
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DRIVER_REVISION: 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9
+      KERNEL_VERSION: 6.18.58
+    steps:
+      - name: Install kernel build dependencies
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bc bison build-essential flex libelf-dev libssl-dev
+      - name: Download and verify Linux source
+        run: |
+          mkdir -p build
+          curl --fail --location --retry 3 \
+            "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz" \
+            -o "build/linux-${KERNEL_VERSION}.tar.xz"
+          printf '%s  %s\n' \
+            069b19f9032c4dac8149ae4b6520c35debca0f42a9f6d52ee55ba6ca9b818013 \
+            "build/linux-${KERNEL_VERSION}.tar.xz" | sha256sum --check
+          tar -xJf "build/linux-${KERNEL_VERSION}.tar.xz" -C build
+      - name: Fetch the pinned mac80211 driver source
+        run: |
+          git clone --filter=blob:none https://github.com/chunkeey/rtl8192su.git build/rtl8192su
+          git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
+          test "$(git -C build/rtl8192su rev-parse HEAD)" = "$DRIVER_REVISION"
+      - name: Prepare Linux 6.18.58 headers
+        run: |
+          kernel="$GITHUB_WORKSPACE/build/linux-${KERNEL_VERSION}"
+          make -C "$kernel" defconfig
+          "$kernel/scripts/config" --file "$kernel/.config" \
+            --enable WLAN --enable USB_SUPPORT --enable USB \
+            --module CFG80211 --module MAC80211 --module FW_LOADER
+          make -C "$kernel" olddefconfig
+          make -C "$kernel" -j2 modules_prepare
+      - name: Compile r92su for RTL8191SU
+        run: |
+          make -C "build/linux-${KERNEL_VERSION}" \
+            M="$GITHUB_WORKSPACE/build/rtl8192su/r92su" \
+            CONFIG_R92SU=m modules
+          test -s build/rtl8192su/r92su/r92su.ko

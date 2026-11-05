@@ -36,3 +36,4 @@ usbmuxd
 usbmuxd-udev
 wpa_supplicant
 wireguard-tools
+wireless-regdb

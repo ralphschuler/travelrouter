@@ -26,8 +26,19 @@ def run(root, binary, *args):
     subprocess.run([shutil.which('chroot'), str(root), executable(root, binary), *args], check=True)  # nosec B603
 
 
+def validate_wireless_regulatory_database(root):
+    firmware = Path(root) / 'lib/firmware'
+    database = firmware / 'regulatory.db'
+    signature = firmware / 'regulatory.db.p7s'
+    if not database.is_file():
+        raise RuntimeError('Missing signed wireless regulatory database; install wireless-regdb')
+    if not signature.is_file():
+        raise RuntimeError('Missing wireless regulatory database signature')
+
+
 def validate(root):
     root = Path(root)
+    validate_wireless_regulatory_database(root)
     (root / 'run/travelrouter').mkdir(parents=True, exist_ok=True)
     (root / 'run/unbound').mkdir(parents=True, exist_ok=True)
     for name, minor in (('null', 3), ('random', 8), ('urandom', 9)):

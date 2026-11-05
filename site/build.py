@@ -16,6 +16,7 @@ PAGES = {
     'design': ('docs/design.md', 'Architecture'),
     'panel-design': ('docs/panel-design.md', 'Panel design'),
     'hardware-test': ('docs/hardware-test.md', 'Hardware qualification'),
+    'wifi-support': ('docs/wifi-support.md', 'Wi-Fi driver support'),
     'verification': ('docs/verification.md', 'Verification'),
     'image-testing': ('docs/image-testing.md', 'Image boot tests'),
     'build-targets': ('docs/build-targets.md', 'Platforms & installation'),
