@@ -44,10 +44,10 @@ supported driver, so it is not included in the release image.
 The `RTL8191SU driver compatibility` GitHub Actions workflow checks whether
 this source compiles against Linux 6.18.58, applying the compatibility patches
 kept under `image/drivers/rtl8192su`. The initial patch set replaces removed
-kernel headers and makes CCMP transmit errors drop the packet. Passing that
-build proves only API compatibility. The adapter still needs real CM5 checks
-for scanning, encrypted upstream connections, unplug/replug and reboot before
-the driver can ship.
+kernel headers, updates cfg80211 and netdevice callbacks, and makes CCMP
+transmit errors drop the packet. Passing that build proves only API
+compatibility. The adapter still needs real CM5 checks for scanning, encrypted
+upstream connections, unplug/replug and reboot before the driver can ship.
 
 Use a dongle whose USB ID is handled by one of the maintained in-tree modules
 above. To request support for another chipset, record its USB ID, kernel
