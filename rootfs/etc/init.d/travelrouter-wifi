@@ -1,0 +1,30 @@
+#!/sbin/openrc-run
+description="Load the experimental RTL8191SU USB Wi-Fi driver"
+
+depend() {
+    need localmount
+    after modloop
+    before networkmanager
+}
+
+start() {
+    module=/opt/travelrouter/modules/r92su.ko
+    if [ ! -s "$module" ]; then
+        ebegin "No optional RTL8191SU module for this image target"
+        eend 0
+        return 0
+    fi
+
+    release=$(uname -r)
+    module_dir="/lib/modules/$release/updates"
+    if [ ! -d "/lib/modules/$release" ]; then
+        ebegin "Kernel module directory for $release is unavailable"
+        eend 1
+        return 1
+    fi
+
+    ebegin "Registering the experimental RTL8191SU module"
+    mkdir -p "$module_dir" && cp "$module" "$module_dir/r92su.ko" && \
+        depmod -a "$release" && modprobe r92su
+    eend $?
+}

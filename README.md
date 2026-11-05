@@ -71,23 +71,30 @@ The build runs on a native aarch64 GitHub runner in a pinned Alpine container:
 ```sh
 docker run --rm --cap-add NET_ADMIN -v "$PWD:/source" -w /source \
   alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a \
-  sh image/build.sh
+  sh -c 'apk add --no-cache make && make image-cm5'
 ```
 
 Use a fresh checkout for each build. No host block devices are mounted or written.
-The builder verifies the official RPi boot bundle, fetches the signed package
-closure, proves offline installation, runs real service parsers, and creates a
-FAT32 disk image with space for package updates and configuration overlays.
+The Makefile controls the image, test and driver builds. The builder verifies
+the official RPi boot bundle, fetches the signed package closure, builds the
+experimental RTL8191SU module against the matching Alpine kernel headers,
+proves offline installation, runs service parsers, and creates a FAT32 disk
+image with space for package updates and configuration overlays.
 Alpine repositories move within the stable branch; metadata records exact package
 versions/hashes. Builds are repeatable, not claimed bit-identical across changing
 repository indexes.
 
+Build targets accept Make options. For example, `make image-generic
+TARGET=generic-aarch64` builds a generic target, and `make driver
+KERNEL_RELEASE=6.18.58-0-rpi KERNEL_PACKAGE_VERSION=6.18.58-r0` builds the pinned
+RTL8191SU candidate module by itself in the matching Alpine ARM64 environment.
+
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/ruff check src tests image
-.venv/bin/bandit -q -r src image -c pyproject.toml
+make lint
+make unit
+make audit
 ```
 
 See [operations and recovery](docs/operations.md), [security policy](SECURITY.md),

@@ -5,7 +5,7 @@ export PYTHONPATH=/opt/travelrouter
 
 depend() {
     need localmount
-    after hwdrivers modloop udev-trigger
+    after hwdrivers modloop udev-trigger travelrouter-wifi
     before networkmanager hostapd dnsmasq travelrouter
 }
 

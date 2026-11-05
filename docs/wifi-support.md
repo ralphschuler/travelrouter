@@ -28,26 +28,26 @@ chip revision, or vendor-specific kernel. Confirm a dongle's USB ID and its
 driver before treating it as supported; physical CM5 qualification is still
 required.
 
-## Known unsupported adapter
+## Experimental RTL8191SU adapter
 
 USB ID `0bda:8172` is a Realtek RTL8191SU. Linux sees it on the USB bus, but the
-shipping 6.18 kernel has no matching driver. Its former `r8712u` driver was
-removed upstream because it relied on deprecated Wireless Extensions, had
-ongoing maintenance issues, and did not support WPA3. Firmware alone cannot
-make it work. The replacement `rtl8192su` project is still marked work in
-progress. Its [mac80211 source](https://github.com/chunkeey/rtl8192su) lists
-USB ID `0bda:8172` and requests the firmware already shipped in Alpine. The
-pinned source revision has not changed since 2017, and its README only claims
-support for recent `wireless-testing` kernels. It is a candidate to port, not a
-supported driver, so it is not included in the release image.
+shipping 6.18 kernel has no in-tree matching driver. Its former `r8712u` driver
+was removed upstream because of deprecated Wireless Extensions and maintenance
+problems; upstream also notes that this hardware cannot use WPA3. Firmware alone
+cannot make it work. The replacement [mac80211 source](https://github.com/chunkeey/rtl8192su)
+lists USB ID `0bda:8172` and requests the firmware already shipped in Alpine,
+but the project still calls itself work in progress and only documents builds
+against `wireless-testing`.
 
-The `RTL8191SU driver compatibility` GitHub Actions workflow checks whether
-this source compiles against Linux 6.18.58, applying the compatibility patches
-kept under `image/drivers/rtl8192su`. The initial patch set replaces removed
-kernel headers, updates cfg80211 and netdevice callbacks, and makes CCMP
-transmit errors drop the packet. Passing that build proves only API
-compatibility. The adapter still needs real CM5 checks for scanning, encrypted
-upstream connections, unplug/replug and reboot before the driver can ship.
+The pinned upstream revision is recorded in `image/drivers/rtl8192su/UPSTREAM_REVISION`;
+the numbered compatibility patches and Makefile define how to update it. The
+CM5 development image builds this module against the exact Alpine 6.18.58 kernel
+headers, registers it after `modloop`, and checks that it loads in the QEMU image
+test. Release and development builds include it by default; pass
+`RTL8191SU=0` to `make image-cm5` to opt out. QEMU verifies module ABI and
+dependency loading, not radio behavior. The module remains marked experimental
+until the CM5 passes physical scan, WPA2 association, traffic, unplug/replug,
+and reboot checks.
 
 Use a dongle whose USB ID is handled by one of the maintained in-tree modules
 above. To request support for another chipset, record its USB ID, kernel

@@ -9,7 +9,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-def generate(root, out, bundle_sha, architecture='aarch64', target='cm5'):
+def generate(root, out, bundle_sha, architecture='aarch64', target='cm5',
+             driver_module=None, driver_revision=None, kernel_release=None):
     targets = {'cm5': 'aarch64', 'generic-x86_64': 'x86_64', 'generic-aarch64': 'aarch64'}
     if targets.get(target) != architecture:
         raise ValueError('Image target and architecture do not match')
@@ -44,6 +45,17 @@ def generate(root, out, bundle_sha, architecture='aarch64', target='cm5'):
                 'built_at': datetime.now(UTC).isoformat(),
                 'qualification': 'experimental: ' + qualification,
                 'package_sha256': hashes}
+    metadata['experimental_rtl8191su_driver'] = None
+    if driver_module is not None:
+        module_path = Path(driver_module)
+        if not module_path.is_file():
+            raise RuntimeError('Experimental RTL8191SU module is missing from build metadata inputs')
+        metadata['experimental_rtl8191su_driver'] = {
+            'source': 'https://github.com/chunkeey/rtl8192su',
+            'source_revision': driver_revision,
+            'kernel_release': kernel_release,
+            'module_sha256': hashlib.sha256(module_path.read_bytes()).hexdigest(),
+        }
     (out / 'build-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
 
 
