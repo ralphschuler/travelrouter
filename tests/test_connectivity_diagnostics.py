@@ -46,3 +46,18 @@ class ConnectivityDiagnosticTests(unittest.TestCase):
         with patch('travelrouter.system.command', return_value='login\n302') as run:
             self.assertEqual(router._probe('wlan1'), 'captive')
             self.assertEqual(run.call_count, 1)
+
+    def test_transient_offline_probes_do_not_immediately_interrupt_online_clients(self):
+        from travelrouter.system import should_apply_connectivity
+
+        for failures in range(1, 6):
+            self.assertFalse(should_apply_connectivity('offline', 'online', failures, 'wlan1', 'direct'))
+        self.assertTrue(should_apply_connectivity('offline', 'online', 6, 'wlan1', 'direct'))
+        self.assertTrue(should_apply_connectivity('online', 'offline', 2, 'wlan1', 'direct'))
+
+    def test_lost_route_and_protected_connections_fail_closed_immediately(self):
+        from travelrouter.system import should_apply_connectivity
+
+        self.assertTrue(should_apply_connectivity('offline', 'online', 1, None, 'direct'))
+        for mode in ('wireguard', 'proxy'):
+            self.assertTrue(should_apply_connectivity('offline', 'online', 1, 'wlan1', mode))

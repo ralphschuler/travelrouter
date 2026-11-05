@@ -155,6 +155,15 @@ def initialize(store):
     return config
 
 
+
+def should_apply_connectivity(candidate, current, observations, wan, privacy_mode):
+    """Keep brief direct-mode probe failures from restarting client DNS/DHCP."""
+    if not wan or (candidate == 'offline' and privacy_mode != 'direct'):
+        return True
+    if candidate == 'offline' and current == 'online':
+        return observations >= 6
+    return observations >= 2
+
 class System:
     def __init__(self, store):
         self.store = store
@@ -488,7 +497,7 @@ class System:
                         observations += 1
                     else:
                         candidate, observations = state, 1
-                    if observations >= 2 or not wan:
+                    if should_apply_connectivity(state, self.state, observations, wan, self.privacy.mode):
                         self.apply(state, wan)
                     if self.pending_restart and time.monotonic() >= self.pending_restart:
                         config = self.store.load()
