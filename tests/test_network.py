@@ -1,12 +1,21 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from travelrouter.network import Network, parse_nmcli, write_profile
+from travelrouter.network import CommandFailure, Network, command, parse_nmcli, write_profile
 
 
 class NetworkTests(unittest.TestCase):
+    def test_failed_command_exposes_only_safe_exit_status(self):
+        result = Mock(returncode=6, stdout='private data', stderr='private data')
+        with patch('travelrouter.network.shutil.which', return_value='/usr/bin/curl'), \
+             patch('travelrouter.network.subprocess.run', return_value=result):
+            with self.assertRaises(CommandFailure) as error:
+                command(['/usr/bin/curl'])
+        self.assertEqual(error.exception.returncode, 6)
+        self.assertNotIn('private data', str(error.exception))
+
     def test_nmcli_escaped_ssid_is_preserved(self):
         self.assertEqual(parse_nmcli(r'Cafe\:Floor\\2:WPA2:91:*'),
                          ['Cafe:Floor\\2', 'WPA2', '91', '*'])

@@ -14,6 +14,12 @@ from .security import validate_text
 WIFI_CONNECT_TIMEOUT = 90
 
 
+class CommandFailure(RuntimeError):
+    def __init__(self, program, returncode):
+        self.returncode = returncode
+        super().__init__(f'{Path(program).name} operation failed')
+
+
 def command(arguments, timeout=20, input_text=None):
     executable = shutil.which(Path(arguments[0]).name, path='/usr/sbin:/usr/bin:/sbin:/bin')
     if not executable:
@@ -23,7 +29,7 @@ def command(arguments, timeout=20, input_text=None):
                             timeout=timeout, check=False)  # nosec B603
     if result.returncode:
         # External messages may contain credentials; do not return them to HTTP.
-        raise RuntimeError(f'{Path(arguments[0]).name} operation failed')
+        raise CommandFailure(arguments[0], result.returncode)
     return result.stdout
 
 

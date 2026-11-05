@@ -18,7 +18,7 @@ from .backup import seal, unseal, validate_payload
 from .config import atomic_write
 from .developer import configure_files, host_fingerprint, validate_public_key
 from .filtering import Filtering, validate_settings
-from .network import Network, command, write_profile
+from .network import CommandFailure, Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
 from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
@@ -372,9 +372,26 @@ class System:
                 return interface(device)
         return None
 
+    def _probe_result(self, state, reason):
+        result = (state, reason)
+        if getattr(self, '_last_probe_result', None) != result:
+            LOG.info('Connectivity probe: %s - %s', state, reason)
+            self._last_probe_result = result
+        return state
+
+    @staticmethod
+    def _probe_failure(stage, error):
+        if isinstance(error, CommandFailure):
+            return f'{stage} check failed (curl exit {error.returncode})'
+        if isinstance(error, subprocess.TimeoutExpired):
+            return f'{stage} check timed out'
+        if isinstance(error, ValueError):
+            return f'{stage} check gave an invalid response'
+        return f'{stage} check failed'
+
     def _probe(self, wan):
         if not wan:
-            return 'offline'
+            return self._probe_result('offline', 'no upstream route')
         args = ['/usr/bin/curl', '--silent', '--show-error', '--noproxy', '*',
                 '--interface', wan, '--max-time', '5', '--max-filesize', '4096',
                 '--write-out', '\n%{http_code}']
@@ -383,8 +400,8 @@ class System:
                                 'http://nmcheck.gnome.org/check_network_status.txt'], timeout=7)
             body, code = response.rsplit('\n', 1)
             status = int(code)
-        except (RuntimeError, subprocess.TimeoutExpired, ValueError):
-            return 'offline'
+        except (RuntimeError, subprocess.TimeoutExpired, ValueError) as error:
+            return self._probe_result('offline', self._probe_failure('HTTP', error))
         tls_ok = False
         if status == 200 and body.strip() == 'NetworkManager is online':
             try:
@@ -392,9 +409,18 @@ class System:
                                     'https://nmcheck.gnome.org/check_network_status.txt'], timeout=7)
                 tls_body, tls_code = response.rsplit('\n', 1)
                 tls_ok = tls_code == '200' and tls_body.strip() == 'NetworkManager is online'
-            except (RuntimeError, subprocess.TimeoutExpired, ValueError):
-                pass
-        return classify_probe(True, status, body, tls_ok)
+            except (RuntimeError, subprocess.TimeoutExpired, ValueError) as error:
+                return self._probe_result('offline', self._probe_failure('HTTPS', error))
+        state = classify_probe(True, status, body, tls_ok)
+        if state == 'online':
+            reason = 'HTTP and HTTPS checks passed'
+        elif state == 'captive':
+            reason = f'HTTP check returned a captive response (status {status})'
+        elif status == 200:
+            reason = 'HTTPS check returned an unexpected response'
+        else:
+            reason = f'HTTP check returned status {status}'
+        return self._probe_result(state, reason)
 
     def apply(self, state, wan):
         config = self.store.load()
@@ -425,6 +451,7 @@ class System:
         if not dns_path.exists() or dns_path.read_text() != dns_content:
             atomic_write(dns_path, dns_content, 0o644)
             # A normal OpenRC restart would stop this controller through dependencies.
+            LOG.info('Reloading DNS and DHCP service for %s state', effective)
             command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
         self.last_policy = key
         self.state, self.wan = effective, wan
