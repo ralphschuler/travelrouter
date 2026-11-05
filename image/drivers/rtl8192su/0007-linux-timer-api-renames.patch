@@ -1,0 +1,40 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] use current Linux timer API names
+
+Linux 6.15 removed del_timer_sync() and Linux 6.16 renamed from_timer().
+Use the timer API names available in the pinned Linux 6.18 target.
+
+---
+diff --git a/rx.c b/rx.c
+index f36a297..35db823 100644
+--- a/rx.c
++++ b/rx.c
+@@ -1087,6 +1087,6 @@ void r92su_reorder_tid_timer(struct timer_list *timer)
+ {
+ 	struct sk_buff_head frames;
+-	struct r92su_rx_tid *tid = from_timer(tid, timer, reorder_timer);
++	struct r92su_rx_tid *tid = timer_container_of(tid, timer, reorder_timer);
+ 	struct r92su *r92su;
+ 	struct r92su_sta *sta;
+ 	struct cfg80211_bss *bss;
+diff --git a/sta.c b/sta.c
+index e829cae..f2ca570 100644
+--- a/sta.c
++++ b/sta.c
+@@ -44,7 +44,7 @@ static void r92su_free_tid_rcu(struct rcu_head *head)
+ 							rcu_head);
+ 	int i;
+ 
+-	del_timer_sync(&tid->reorder_timer);
++	timer_delete_sync(&tid->reorder_timer);
+ 
+ 	spin_lock_bh(&tid->lock);
+ 	tid->len = 0;
+@@ -129,6 +129,5 @@ struct r92su_sta *r92su_sta_alloc(struct r92su *r92su, const u8 *mac_addr,
+ 	sta = kzalloc(sizeof(*sta), flag);
+ 	if (sta) {
+ 		unsigned long flags;
+-		u64 uptime;
+ 		int i;
+ 
+ 		for (i = 0; i < ARRAY_SIZE(sta->defrag); i++)

@@ -10,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .diagnostics import bundle as diagnostic_bundle
+from .diagnostics import collect as collect_diagnostics
 from .metrics import logs, snapshot
 from .security import Sessions, hash_password, validate_setup, verify_password
 
@@ -115,6 +117,25 @@ def make_server(address, store, backend):
                               '/fonts/plex-sans-semibold.woff2': ('fonts/plex-sans-semibold.woff2', 'font/woff2'),
                               '/style.css': ('style.css', 'text/css; charset=utf-8')}[path]
                 self.send(200, (ASSETS / name).read_bytes(), content_type=kind)
+                return
+            if path == '/api/diagnostics.zip':
+                if not self.session():
+                    self.send(401, {'error': 'Sign in to continue'})
+                elif not store.load()['setup_complete']:
+                    self.send(409, {'error': 'Replace factory passwords before continuing'})
+                else:
+                    self.send(200, diagnostic_bundle(),
+                              {'Content-Disposition': 'attachment; filename="travelrouter-diagnostics.zip"'},
+                              content_type='application/zip')
+                return
+            if path == '/api/diagnostics':
+                if not self.session():
+                    self.send(401, {'error': 'Sign in to continue'})
+                elif not store.load()['setup_complete']:
+                    self.send(409, {'error': 'Replace factory passwords before continuing'})
+                else:
+                    payload = json.dumps(collect_diagnostics(), indent=2).encode()
+                    self.send(200, payload, {'Content-Disposition': 'attachment; filename="travelrouter-diagnostics.json"'})
                 return
             with backend.lock:
                 session = self.session()

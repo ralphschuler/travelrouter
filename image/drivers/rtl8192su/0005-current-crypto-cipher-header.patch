@@ -1,0 +1,34 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] include the current single-block cipher API
+
+Linux 6.18 no longer exposes crypto_cipher through linux/crypto.h. Include
+the header that declares the single-block cipher interface used for legacy
+WEP/TKIP compatibility.
+
+---
+diff --git a/tkip.h b/tkip.h
+index 6500ff9..12a91e7 100644
+--- a/tkip.h
++++ b/tkip.h
+@@ -9,7 +9,7 @@
+ #define TKIP_H
+ 
+ #include <linux/types.h>
+-#include <linux/crypto.h>
++#include <crypto/internal/cipher.h>
+ 
+ enum ieee80211_internal_tkip_state {
+ 	TKIP_STATE_NOT_INIT,
+diff --git a/wep.h b/wep.h
+index 2043197..506c6a6 100644
+--- a/wep.h
++++ b/wep.h
+@@ -12,7 +12,7 @@
+ #define WEP_H
+ 
+ #include <linux/types.h>
+-#include <linux/crypto.h>
++#include <crypto/internal/cipher.h>
+ #include <linux/skbuff.h>
+ 
+ struct crypto_cipher *ieee80211_wep_init(void);

@@ -1,0 +1,16 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] import the kernel internal crypto namespace
+
+The legacy WEP/TKIP implementation uses single-block cipher helpers exported
+in CRYPTO_INTERNAL on current kernels. Declare that dependency so modpost and
+module loading can validate it explicitly.
+
+---
+--- a/usb.c
++++ b/usb.c
+@@ -1,4 +1,5 @@
+ MODULE_FIRMWARE(RTL8192SU_FIRMWARE);
+ MODULE_DESCRIPTION("Experimental Realtek RTL8191SU USB Wi-Fi driver");
+ MODULE_AUTHOR("Christian Lamparter <chunkeey@googlemail.com>");
+ MODULE_LICENSE("GPL");
++MODULE_IMPORT_NS("CRYPTO_INTERNAL");

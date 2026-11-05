@@ -32,13 +32,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -r requirements-dev.txt
-      - run: ruff check src tests image site
-      - run: bandit -q -r src image site -c pyproject.toml
-      - run: python site/build.py && python site/check.py
-      - run: shellcheck -s sh image/*.sh image/e2e/*.sh image/targets/*.sh rootfs/etc/init.d/travelrouter rootfs/etc/init.d/travelrouter-bootstrap rootfs/etc/init.d/travelrouter-recovery rootfs/etc/init.d/travelrouter-ssh rootfs/etc/travelrouter/recovery.sh
-      - run: PYTHONPATH=src coverage run --source=src/travelrouter -m unittest discover -s tests -v
-      - run: coverage report
-      - run: pip-audit -r requirements-dev.txt
+      - run: make quality
 
   developer-ssh:
     name: Developer SSH authentication
@@ -46,9 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -f image/e2e/developer.Dockerfile -t travelrouter-ssh-test .
-      - run: >-
-          docker run --rm --init --network none -e TRAVELROUTER_TEST_CONTAINER=yes
-          -v "$PWD:/source:ro" travelrouter-ssh-test sh /source/image/e2e/developer.sh
+      - run: make developer-ssh
 
   secrets:
     name: Secret scanning
@@ -106,7 +98,7 @@ jobs:
           -e GITHUB_SHA -e GITHUB_REF_NAME
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-          sh image/build.sh
+          sh -c 'apk add --no-cache make && make image-cm5'
       - name: Download the published image selected for diagnosis
         if: github.event_name == 'workflow_dispatch' && inputs.image_release != ''
         env:
@@ -126,7 +118,7 @@ jobs:
           docker run --rm
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-          sh image/e2e/run.sh dist/travelrouter-cm5-aarch64.img.gz
+          sh -c 'apk add --no-cache make && make e2e-cm5 IMAGE=dist/travelrouter-cm5-aarch64.img.gz'
       - name: Preserve image boot and client diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -166,14 +158,14 @@ jobs:
           name: travelrouter-cm5-aarch64
           path: dist
       - name: Build QEMU with Raspberry Pi watchdog fix
-        run: docker build -f image/e2e/recovery.Dockerfile -t travelrouter-recovery-test .
+        run: make recovery-test-image
       - name: Test signed update, failed boot and automatic rollback
         timeout-minutes: 70
         run: >-
           docker run --rm --network none -v "$PWD:/source" -w /source
-          travelrouter-recovery-test python3 image/e2e/run.py
-          --image /source/dist/travelrouter-cm5-aarch64.img.gz
-          --output /source/build/recovery-results --scratch /source/build/recovery-vm --recovery
+          travelrouter-recovery-test make e2e-recovery
+          IMAGE=/source/dist/travelrouter-cm5-aarch64.img.gz
+          RESULTS_DIR=/source/build/recovery-results SCRATCH_DIR=/source/build/recovery-vm
       - name: Preserve recovery diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -203,19 +195,20 @@ jobs:
           BUILD_TARGET: ${{ matrix.target }}
         run: >-
           docker run --rm --cap-add NET_ADMIN
-          -e GITHUB_SHA -e GITHUB_REF_NAME
+          -e GITHUB_SHA -e GITHUB_REF_NAME -e BUILD_TARGET
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-          sh image/build-generic.sh "$BUILD_TARGET"
+          sh -c 'apk add --no-cache make && make image-generic TARGET="$BUILD_TARGET"'
       - name: Boot UEFI installer and validate installed runtime
         timeout-minutes: 35
         env:
           BUILD_TARGET: ${{ matrix.target }}
         run: >-
           docker run --rm
+          -e BUILD_TARGET
           -v "$PWD:/source" -w /source
           alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
-          sh image/e2e/generic.sh "$BUILD_TARGET"
+          sh -c 'apk add --no-cache make && make e2e-generic TARGET="$BUILD_TARGET"'
       - name: Preserve UEFI and installer diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -268,11 +261,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Verify every platform artifact
-        run: |
-          cd dist
-          sha256sum -c SHA256SUMS
-          sha256sum -c travelrouter-generic-x86_64-SHA256SUMS
-          sha256sum -c travelrouter-generic-aarch64-SHA256SUMS
+        run: make verify-release-artifacts
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
@@ -280,8 +269,8 @@ jobs:
       - name: Sign application update
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: python image/sign_update.py
-      - run: python image/release_manifest.py dist
+        run: make sign-update
+      - run: make release-manifest
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*

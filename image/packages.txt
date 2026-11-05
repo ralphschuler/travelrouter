@@ -17,6 +17,7 @@ iproute2
 iw
 linux-firmware
 libimobiledevice-progs
+kmod
 logrotate
 networkmanager
 networkmanager-cli
@@ -36,3 +37,4 @@ usbmuxd
 usbmuxd-udev
 wpa_supplicant
 wireguard-tools
+wireless-regdb

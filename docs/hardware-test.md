@@ -10,6 +10,8 @@ The tested Realtek RTL8191SU adapter (`0bda:8172`) is not supported by the
 shipped Linux 6.18 kernel: its former `r8712u` driver was removed upstream.
 The presence of `rtl8712u.bin` firmware alone does not provide a driver. See
 the [upstream removal](https://lkml.rescloud.iu.edu/hypermail/linux/kernel/2410.2/06082.html).
+See the [Wi-Fi support policy](wifi-support.md) for the maintained module set
+and this adapter's compatibility boundary.
 
 - [ ] Record CM5 RAM/eMMC variant, carrier board, `lsusb`, both Wi-Fi drivers.
 - [x] Boot without Ethernet or upstream and observe the TravelRouter hotspot.

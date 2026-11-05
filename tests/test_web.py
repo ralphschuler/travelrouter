@@ -4,6 +4,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from travelrouter.config import ConfigStore
 from travelrouter.web import make_server
@@ -80,6 +81,34 @@ class WebTests(unittest.TestCase):
         status, body, _ = self.request('/api/login', {'password': 'ChangeMe-TravelRouter!'})
         self.assertEqual(status, 200)
         self.csrf = json.loads(body)['csrf']
+
+    def test_diagnostic_download_requires_login_and_completed_setup(self):
+        self.assertEqual(self.request('/api/diagnostics')[0], 401)
+        self.login()
+        self.assertEqual(self.request('/api/diagnostics')[0], 409)
+        config = self.store.load()
+        config['setup_complete'] = True
+        self.store.save(config)
+        with patch('travelrouter.web.collect_diagnostics', return_value={'checks': {}}):
+            status, payload, headers = self.request('/api/diagnostics')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {'checks': {}})
+        self.assertIn('attachment', headers['Content-Disposition'])
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+
+    def test_diagnostic_zip_requires_authentication_and_setup(self):
+        self.assertEqual(self.request('/api/diagnostics.zip')[0], 401)
+        self.login()
+        self.assertEqual(self.request('/api/diagnostics.zip')[0], 409)
+        config = self.store.load()
+        config['setup_complete'] = True
+        self.store.save(config)
+        with patch('travelrouter.web.diagnostic_bundle', return_value=b'PK-test'):
+            status, payload, headers = self.request('/api/diagnostics.zip')
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, b'PK-test')
+        self.assertEqual(headers['Content-Type'], 'application/zip')
+        self.assertIn('attachment', headers['Content-Disposition'])
 
     def test_mutation_without_login_is_rejected(self):
         status, _, _ = self.request('/api/connect', {'ssid': 'Hotel', 'password': 'test12345'})

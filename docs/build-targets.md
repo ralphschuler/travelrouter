@@ -86,13 +86,17 @@ the executable is installed; boot tests exercise the actual module-bundle mount.
 Run in the matching architecture's pinned Alpine container:
 
 ```sh
-sh image/build-generic.sh generic-x86_64
-sh image/build-generic.sh generic-aarch64
+make image-generic TARGET=generic-x86_64
+make image-generic TARGET=generic-aarch64
 ```
 
 Each command is for its matching native architecture, not both in one container.
 Outputs go to `dist/<target>/`; use fresh target build/output directories. The
-existing CM5 command remains `sh image/build.sh` in an aarch64 container.
+CM5 image target is `make image-cm5` in an aarch64 container. For the separate
+RTL8191SU module build, use `make driver` and override `KERNEL_RELEASE`,
+`KERNEL_PACKAGE_VERSION`, `DRIVER_REVISION`, `ARCH`, or `CROSS_COMPILE` as needed.
+Build options are opt-outs: the CM5 image includes the experimental RTL8191SU
+module by default; use `make image-cm5 RTL8191SU=0` to omit it.
 
 The CI matrix builds each architecture on a matching GitHub runner, validates
 offline package installation, runs parsers and boot tests, scans installed

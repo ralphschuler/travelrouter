@@ -26,6 +26,11 @@ class PolicyTests(unittest.TestCase):
         self.assertNotIn('iifname "wlan1" oifname "wlan0" accept', rules)
         self.assertNotIn('flush ruleset', rules)
 
+    def test_dhcp_reply_allowed_before_upstream_route_exists(self):
+        rules = render_firewall('wlan0', None, 'offline', True, physical_wan='wlan1')
+        self.assertIn('iifname "wlan1" udp sport 67 udp dport 68 accept', rules)
+        self.assertNotIn('masquerade', rules)
+
     def test_invalid_or_same_interface_cannot_generate_firewall(self):
         for ap, wan in [('wlan0; include evil', 'wlan1'), ('wlan0', 'wlan0')]:
             with self.assertRaises(ValueError):

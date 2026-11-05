@@ -1,0 +1,65 @@
+diff --git a/event.c b/event.c
+index 26633d0..018378e 100644
+--- a/event.c
++++ b/event.c
+@@ -30,7 +30,7 @@
+  *****************************************************************************/
+ #include <linux/kernel.h>
+ 
+-#include <asm/unaligned.h>
++#include <linux/unaligned.h>
+ 
+ #include "r92su.h"
+ #include "event.h"
+diff --git a/michael.c b/michael.c
+index 408649b..2b6760d 100644
+--- a/michael.c
++++ b/michael.c
+@@ -9,7 +9,7 @@
+ #include <linux/types.h>
+ #include <linux/bitops.h>
+ #include <linux/ieee80211.h>
+-#include <asm/unaligned.h>
++#include <linux/unaligned.h>
+ 
+ #include "michael.h"
+ 
+diff --git a/rx.c b/rx.c
+index 7ccd039..c57a537 100644
+--- a/rx.c
++++ b/rx.c
+@@ -32,7 +32,7 @@
+ #include <linux/etherdevice.h>
+ 
+ #include <net/ieee80211_radiotap.h>
+-#include <asm/unaligned.h>
++#include <linux/unaligned.h>
+ 
+ #include "r92su.h"
+ #include "rx.h"
+diff --git a/tkip.c b/tkip.c
+index 6a0775e..9d20126 100644
+--- a/tkip.c
++++ b/tkip.c
+@@ -11,7 +11,7 @@
+ #include <linux/types.h>
+ #include <linux/netdevice.h>
+ #include <linux/export.h>
+-#include <asm/unaligned.h>
++#include <linux/unaligned.h>
+ #include <net/cfg80211.h>
+ 
+ #include "tkip.h"
+diff --git a/wep.c b/wep.c
+index e63a4e1..86060af 100644
+--- a/wep.c
++++ b/wep.c
+@@ -18,7 +18,7 @@
+ #include <linux/slab.h>
+ #include <linux/ieee80211.h>
+ #include <net/cfg80211.h>
+-#include <asm/unaligned.h>
++#include <linux/unaligned.h>
+ 
+ #include "wep.h"
+ 

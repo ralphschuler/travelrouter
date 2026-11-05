@@ -1,0 +1,46 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] update Linux wireless receive helper APIs
+
+Use the current cfg80211 data conversion helpers and timer/network receive
+entry points available in Linux 6.18.
+
+---
+--- a/rx.c
++++ b/rx.c
+@@ -202,10 +202,7 @@
+ 
+ 	skb_orphan(skb);
+ 
+-	if (in_interrupt())
+-		rc = netif_rx_ni(skb);
+-	else
+-		rc = netif_rx(skb);
++	rc = netif_rx(skb);
+ 
+ 	if (rc == NET_RX_SUCCESS) {
+ 		skb->dev->stats.rx_packets++;
+@@ -576,12 +573,13 @@
+ 		struct ethhdr ethhdr;
+ 
+ 		if (ieee80211_data_to_8023_exthdr(skb, &ethhdr,
+-		    wdev_address(&r92su->wdev), r92su->wdev.iftype))
++		    wdev_address(&r92su->wdev), r92su->wdev.iftype,
++					 0, is_amsdu))
+ 			return RX_DROP;
+ 
+ 		ieee80211_amsdu_to_8023s(skb, queue,
+ 				       wdev_address(&r92su->wdev),
+-				       r92su->wdev.iftype, 0, NULL, NULL);
++				       r92su->wdev.iftype, 0, NULL, NULL, 0);
+ 		*_skb = NULL;
+ 
+ 		if (skb_queue_empty(queue)) {
+@@ -901,7 +899,7 @@
+ set_release_timer:
+ 		mod_timer(&tid->reorder_timer, tid->reorder_time[j] + 1);
+ 	} else {
+-		del_timer(&tid->reorder_timer);
++		timer_delete(&tid->reorder_timer);
+ 	}
+ }
+ 

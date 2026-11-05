@@ -18,7 +18,7 @@ from .backup import seal, unseal, validate_payload
 from .config import atomic_write
 from .developer import configure_files, host_fingerprint, validate_public_key
 from .filtering import Filtering, validate_settings
-from .network import Network, command, write_profile
+from .network import CommandFailure, Network, command, write_profile
 from .policy import LAN_IP, classify_probe, interface, render_dns, render_firewall, render_unbound
 from .privacy import PROXY_INTERFACE, VPN_INTERFACE, Privacy
 from .security import validate_text
@@ -150,9 +150,19 @@ def initialize(store):
     zones, _ = filtering.rules()
     atomic_write('/etc/unbound/travelrouter-blocks.conf', zones, 0o644)
     command(['/sbin/nft', '-f', '-'], input_text=render_firewall(
-        ap, None, 'offline', config['setup_complete'], developer=config.get('developer_enabled') is True))
+        ap, None, 'offline', config['setup_complete'], developer=config.get('developer_enabled') is True,
+        physical_wan=wan))
     return config
 
+
+
+def should_apply_connectivity(candidate, current, observations, wan, privacy_mode):
+    """Keep brief direct-mode probe failures from restarting client DNS/DHCP."""
+    if not wan or (candidate == 'offline' and privacy_mode != 'direct'):
+        return True
+    if candidate == 'offline' and current == 'online':
+        return observations >= 6
+    return observations >= 2
 
 class System:
     def __init__(self, store):
@@ -283,7 +293,8 @@ class System:
     def restore(self, envelope, password):
         self.ensure_no_pending_update()
         payload = validate_payload(unseal(envelope, password))
-        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
+        command(['/sbin/nft', '-f', '-'], input_text=render_firewall(
+            self.ap, self.wan, 'offline', False, self.privacy.mode, physical_wan=self.network.wan))
         self.privacy.stop()
         old_config = self.store.load()
         paths = list(self.network.profiles.glob('travelrouter-*.nmconnection'))
@@ -330,7 +341,8 @@ class System:
         self.ensure_no_pending_update()
         # Drop forwarding before touching route tables or tunnel processes.
         command(['/sbin/nft', '-f', '-'],
-                input_text=render_firewall(self.ap, self.wan, 'offline', False, self.privacy.mode))
+                input_text=render_firewall(
+                    self.ap, self.wan, 'offline', False, self.privacy.mode, physical_wan=self.network.wan))
         self.last_policy = None
         self.privacy.stop()
         mode = self.privacy.prepare(data, self.wan)
@@ -369,9 +381,26 @@ class System:
                 return interface(device)
         return None
 
+    def _probe_result(self, state, reason):
+        result = (state, reason)
+        if getattr(self, '_last_probe_result', None) != result:
+            LOG.info('Connectivity probe: %s - %s', state, reason)
+            self._last_probe_result = result
+        return state
+
+    @staticmethod
+    def _probe_failure(stage, error):
+        if isinstance(error, CommandFailure):
+            return f'{stage} check failed (curl exit {error.returncode})'
+        if isinstance(error, subprocess.TimeoutExpired):
+            return f'{stage} check timed out'
+        if isinstance(error, ValueError):
+            return f'{stage} check gave an invalid response'
+        return f'{stage} check failed'
+
     def _probe(self, wan):
         if not wan:
-            return 'offline'
+            return self._probe_result('offline', 'no upstream route')
         args = ['/usr/bin/curl', '--silent', '--show-error', '--noproxy', '*',
                 '--interface', wan, '--max-time', '5', '--max-filesize', '4096',
                 '--write-out', '\n%{http_code}']
@@ -380,8 +409,20 @@ class System:
                                 'http://nmcheck.gnome.org/check_network_status.txt'], timeout=7)
             body, code = response.rsplit('\n', 1)
             status = int(code)
-        except (RuntimeError, subprocess.TimeoutExpired, ValueError):
-            return 'offline'
+        except (RuntimeError, subprocess.TimeoutExpired, ValueError) as error:
+            # A single probe host can time out even when the link works. A
+            # second, certificate-verified endpoint can establish connectivity
+            # without mistaking a captive redirect for Internet access.
+            try:
+                fallback = command(['/usr/bin/curl', '-4', '--silent', '--show-error', '--noproxy', '*',
+                                    '--interface', wan, '--max-time', '5', '--proto', '=https',
+                                    '--head', '--output', '/dev/null', '--write-out', '%{http_code}',
+                                    'https://example.com/'], timeout=7)
+                if fallback.strip() == '200':
+                    return self._probe_result('online', 'independent HTTPS fallback passed')
+            except (RuntimeError, subprocess.TimeoutExpired):
+                pass
+            return self._probe_result('offline', self._probe_failure('HTTP', error))
         tls_ok = False
         if status == 200 and body.strip() == 'NetworkManager is online':
             try:
@@ -389,9 +430,18 @@ class System:
                                     'https://nmcheck.gnome.org/check_network_status.txt'], timeout=7)
                 tls_body, tls_code = response.rsplit('\n', 1)
                 tls_ok = tls_code == '200' and tls_body.strip() == 'NetworkManager is online'
-            except (RuntimeError, subprocess.TimeoutExpired, ValueError):
-                pass
-        return classify_probe(True, status, body, tls_ok)
+            except (RuntimeError, subprocess.TimeoutExpired, ValueError) as error:
+                return self._probe_result('offline', self._probe_failure('HTTPS', error))
+        state = classify_probe(True, status, body, tls_ok)
+        if state == 'online':
+            reason = 'HTTP and HTTPS checks passed'
+        elif state == 'captive':
+            reason = f'HTTP check returned a captive response (status {status})'
+        elif status == 200:
+            reason = 'HTTPS check returned an unexpected response'
+        else:
+            reason = f'HTTP check returned status {status}'
+        return self._probe_result(state, reason)
 
     def apply(self, state, wan):
         config = self.store.load()
@@ -401,13 +451,13 @@ class System:
         resolvers = self.network.resolvers(wan) if effective == 'captive' and wan else []
         dns_mode = config.get('dns_mode', 'dot')
         developer = config.get('developer_enabled') is True
-        key = (effective, wan, config['setup_complete'], tuple(resolvers), dns_mode, developer,
+        key = (effective, wan, self.network.wan, config['setup_complete'], tuple(resolvers), dns_mode, developer,
                self.privacy.mode, self.filter_revision)
         if key == self.last_policy:
             return
         zones, regions = self.filtering.rules()
         rules = render_firewall(self.ap, wan, effective, config['setup_complete'], self.privacy.mode, regions,
-                                developer=developer)
+                                developer=developer, physical_wan=self.network.wan)
         # Transactional nft replacement must succeed before advertising a new state.
         command(['/sbin/nft', '-f', '-'], input_text=rules)
         zones_path = Path('/etc/unbound/travelrouter-blocks.conf')
@@ -422,6 +472,7 @@ class System:
         if not dns_path.exists() or dns_path.read_text() != dns_content:
             atomic_write(dns_path, dns_content, 0o644)
             # A normal OpenRC restart would stop this controller through dependencies.
+            LOG.info('Reloading DNS and DHCP service for %s state', effective)
             command(['/sbin/rc-service', '--nodeps', 'dnsmasq', 'restart'])
         self.last_policy = key
         self.state, self.wan = effective, wan
@@ -446,7 +497,7 @@ class System:
                         observations += 1
                     else:
                         candidate, observations = state, 1
-                    if observations >= 2 or not wan:
+                    if should_apply_connectivity(state, self.state, observations, wan, self.privacy.mode):
                         self.apply(state, wan)
                     if self.pending_restart and time.monotonic() >= self.pending_restart:
                         config = self.store.load()

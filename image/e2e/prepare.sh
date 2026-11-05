@@ -39,6 +39,14 @@ ip netns exec tr-untrusted python3 -m http.server 8080 --bind 198.18.0.2 >/root/
 
 # Run the shipped default runlevel and service dependency graph unchanged.
 openrc default
+driver_payload=/opt/travelrouter/modules/r92su.ko
+if [ -s "$driver_payload" ]; then
+    test -s "$driver_payload"
+    test -d /sys/module/r92su
+    modinfo -F vermagic "$driver_payload" | grep -F "$(uname -r) " >/dev/null
+    modinfo -F alias "$driver_payload" | grep -F 'usb:v0BDAp8172' >/dev/null
+    test "$(modinfo -F firmware "$driver_payload")" = rtlwifi/rtl8712u.bin
+fi
 python3 /root/ci-image-test/lifecycle.py capture
 rc-service hostapd status
 rc-service dnsmasq status

@@ -1,0 +1,46 @@
+From 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] select receive keys by wireless receiver address
+
+For protected unicast frames use the peer pairwise key, even when a
+group key shares the same key index. Group frames require their indexed
+group key. Preserve the default-key fallback for legacy WEP unicast only.
+
+--- a/rx.c
++++ b/rx.c
+@@ -330,19 +330,28 @@
+ {
+ 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
+ 	struct r92su_rx_info *rx_info = r92su_get_rx_info(skb);
+-	struct r92su_key *key;
++	struct r92su_key *key = NULL;
+ 
+ 	if (rx_info->has_protect) {
+ 		u8 *iv = r92su_get_i3e_payload(hdr);
+ 		u8 idx = iv[3] >> 6 & 0x3;
+ 
+-		key = rcu_dereference(bss_priv->group_key[idx]);
+-
+-		if (!key)
+-			key = rcu_dereference(rx_info->sta->sta_key);
+-
+-		if (!key)
+-			key = rcu_dereference(bss_priv->sta->sta_key);
++		if (is_multicast_ether_addr(hdr->addr1)) {
++			key = rcu_dereference(bss_priv->group_key[idx]);
++		} else {
++			if (rx_info->sta)
++				key = rcu_dereference(rx_info->sta->sta_key);
++			if (!key && bss_priv->sta)
++				key = rcu_dereference(bss_priv->sta->sta_key);
++			if (!key) {
++				struct r92su_key *fallback;
++
++				fallback = rcu_dereference(bss_priv->group_key[idx]);
++				if (fallback && (fallback->type == WEP40_ENCRYPTION ||
++						 fallback->type == WEP104_ENCRYPTION))
++					key = fallback;
++			}
++		}
+ 
+ 		if (!key)
+ 			return RX_DROP;

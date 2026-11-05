@@ -2,11 +2,14 @@
 
 ## Radio support
 
-The image bundles Alpine's complete `linux-firmware` dependency set. It relies
-on the official Raspberry Pi kernel/module loop. Drivers outside that kernel
-are not automatically downloaded. The integrated radio is preferred for the
-hotspot; a detected USB radio is used for upstream Wi-Fi. A single detected
-radio provides setup only. Adapter/carrier compatibility needs physical testing.
+The image bundles Alpine's complete `linux-firmware` dependency set, the signed
+wireless regulatory database and a checked set of upstream USB Wi-Fi modules
+from the official Raspberry Pi kernel/module loop. Drivers outside that kernel
+are not automatically downloaded. See [Wi-Fi driver support](wifi-support.md)
+for the checked module families and known exclusions. The integrated radio is
+preferred for the hotspot; a detected USB radio is used for upstream Wi-Fi. A
+single detected radio provides setup only. Adapter/carrier compatibility needs
+physical testing.
 
 ## Captive networks, DNS and privacy
 

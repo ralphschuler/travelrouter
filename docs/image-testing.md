@@ -25,6 +25,13 @@ two for the router and one in a separate client network namespace. It runs the
 shipped OpenRC sysinit, boot and default runlevels. Production service files,
 application code and package contents are not replaced with mocks.
 
+When the CM5 build includes the experimental RTL8191SU module, the guest also
+loads its declared dependencies from Alpine's read-only `modloop`, inserts the
+module from the writable application overlay, and checks its kernel version,
+USB ID and firmware name.
+QEMU has no RTL8191SU radio, so this proves module loading only; RF scanning and
+upstream association still require the physical CM5 and adapter.
+
 The client checks:
 
 - WPA2 association with the actual hostapd process.

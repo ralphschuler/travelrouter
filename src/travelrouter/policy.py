@@ -52,11 +52,17 @@ def render_dns(ap, state, resolvers):
     return '\n'.join(lines) + '\n'
 
 
-def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=(), developer=False):
+def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=(), developer=False,
+                    physical_wan=None):
     interface(ap)
     if wan:
         interface(wan)
         if wan == ap:
+            raise ValueError('AP and upstream must use separate interfaces')
+    physical_wan = wan if physical_wan is None else physical_wan
+    if physical_wan:
+        interface(physical_wan)
+        if physical_wan == ap:
             raise ValueError('AP and upstream must use separate interfaces')
     if state not in {'offline', 'captive', 'online'}:
         raise ValueError('Invalid connectivity state')
@@ -64,7 +70,6 @@ def render_firewall(ap, wan, state, setup_complete, privacy='direct', regions=()
         raise ValueError('Invalid privacy mode')
     if type(developer) is not bool:
         raise ValueError('Developer mode must be a boolean')
-    physical_wan = wan
     if privacy != 'direct':
         wan = 'trvpn0' if privacy == 'wireguard' else 'trproxy0'
     forwarding = bool(wan and setup_complete and state in {'online', 'captive'})

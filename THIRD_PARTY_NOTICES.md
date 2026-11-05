@@ -11,6 +11,11 @@ Python, UI, configuration templates, and build scripts, not to third-party code.
 - Linux, hostapd, dnsmasq, NetworkManager, WireGuard tooling and sing-box retain
   their respective copyleft licenses. Unbound, Python, cryptography and other
   dependencies retain their own licenses. Firmware has component-specific terms.
+- The experimental `r92su` RTL8191SU kernel module is GPL-2.0-only. Its source is
+  [pinned upstream](https://github.com/chunkeey/rtl8192su/tree/1f09c7a6eceffc92e63ddc636c174e8f3770eeb9)
+  and rebuilt with the compatibility patches under `image/drivers/rtl8192su/`.
+  The build metadata records the source revision and resulting module hash. See
+  the [GPL-2.0 license text](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html).
 - Generic UEFI images include a generated [GNU GRUB](https://www.gnu.org/software/grub/)
   EFI bootloader under GPL-3.0-or-later. Its builder package versions, tool version
   and generated EFI SHA-256 are recorded separately in each target's build metadata.

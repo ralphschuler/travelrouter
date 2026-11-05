@@ -10,14 +10,45 @@ branch=v3.24
 base=https://dl-cdn.alpinelinux.org/alpine
 bundle="alpine-rpi-$version-aarch64.tar.gz"
 bundle_sha=7bc2ac2ac3bd15667f651dc8d10c8423f1272730f028bc8962384c30e5317f62
+kernel_release=${KERNEL_RELEASE:-6.18.58-0-rpi}
+kernel_package_version=${KERNEL_PACKAGE_VERSION:-6.18.58-r0}
+kernel_dev_package=${KERNEL_DEV_PACKAGE:-linux-rpi-dev}
+alpine_branch=${ALPINE_BRANCH:-v3.24}
+apk_arch=${APK_ARCH:-aarch64}
+kernel_package_url=${KERNEL_PACKAGE_URL:-}
+driver_arch=${ARCH:-arm64}
+cross_compile=${CROSS_COMPILE:-}
+driver_revision=${DRIVER_REVISION:-$(tr -d '\n' < "$source_dir/image/drivers/rtl8192su/UPSTREAM_REVISION")}
+include_rtl8191su=${RTL8191SU:-1}
 
 [ "$(apk --print-arch)" = aarch64 ] || { echo 'Build requires native or emulated aarch64 Alpine'; exit 1; }
 [ ! -e "$build_dir" ] || { echo 'Use a fresh checkout for each image build'; exit 1; }
-apk add --no-cache curl tar gzip python3 py3-cryptography mtools dosfstools util-linux coreutils
+apk add --no-cache curl tar gzip python3 py3-cryptography mtools dosfstools \
+    util-linux coreutils squashfs-tools
+case "$include_rtl8191su" in
+    1) apk add --no-cache build-base git kmod patch ;;
+    0) ;;
+    *) echo 'RTL8191SU must be 0 or 1'; exit 2 ;;
+esac
 mkdir -p "$media" "$out" "$build_dir/downloads"
 curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$build_dir/$bundle"
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
+set -- "$media"/boot/config-*-rpi
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+    echo 'Missing or ambiguous Raspberry Pi kernel config'
+    exit 1
+fi
+[ -f "$media/boot/modloop-rpi" ] || { echo 'Missing Raspberry Pi kernel module loop'; exit 1; }
+python3 "$source_dir/image/wifi_support.py" "$1" "$media/boot/modloop-rpi"
+if [ "$include_rtl8191su" = 1 ]; then
+    make -C "$source_dir" driver DRIVER_BUILD_DIR="$build_dir/driver" \
+        DRIVER_OUTPUT="$build_dir/r92su.ko" KERNEL_RELEASE="$kernel_release" \
+        KERNEL_PACKAGE_VERSION="$kernel_package_version" DRIVER_REVISION="$driver_revision" \
+        KERNEL_DEV_PACKAGE="$kernel_dev_package" ALPINE_BRANCH="$alpine_branch" \
+        APK_ARCH="$apk_arch" KERNEL_PACKAGE_URL="$kernel_package_url" \
+        ARCH="$driver_arch" CROSS_COMPILE="$cross_compile"
+fi
 python3 "$source_dir/image/initramfs_recovery.py" "$media/boot/initramfs-rpi" \
     "$source_dir/rootfs/etc/travelrouter/recovery.sh"
 python3 "$source_dir/image/boot_config.py" cmdline "$media/cmdline.txt"
@@ -44,7 +75,14 @@ while IFS= read -r url; do
     name=${url##*/}
     ln "$build_dir/downloads/$name" "$media/repositories/$repository/aarch64/$name"
 done < "$build_dir/package-urls.txt"
-python3 "$source_dir/image/overlay.py" "$source_dir" "$build_dir"
+if [ "$include_rtl8191su" = 1 ]; then
+    python3 "$source_dir/image/overlay.py" "$source_dir" "$build_dir" "$build_dir/r92su.ko"
+else
+    python3 "$source_dir/image/overlay.py" "$source_dir" "$build_dir"
+fi
+if [ "$include_rtl8191su" = 1 ]; then
+    tar -tzf "$media/travelrouter.apkovl.tar.gz" | grep -Fx 'opt/travelrouter/modules/r92su.ko' >/dev/null
+fi
 touch "$media/.travelrouter" "$media/.travelrouter-recovery-v1"
 printf 'enable_uart=1\n[cm5]\ndtoverlay=dwc2,dr_mode=host\n[all]\n' > "$media/usercfg.txt"
 
@@ -60,7 +98,12 @@ python3 "$source_dir/image/validate.py" "$check"
 
 # Preserve exact package versions for audits and future rebuilds.
 apk --root "$check" info -v | sort > "$out/packages.txt"
-python3 "$source_dir/image/sbom.py" "$check" "$out" "$bundle_sha"
+if [ "$include_rtl8191su" = 1 ]; then
+    python3 "$source_dir/image/sbom.py" "$check" "$out" "$bundle_sha" aarch64 cm5 \
+        "$build_dir/r92su.ko" "$driver_revision" "$kernel_release"
+else
+    python3 "$source_dir/image/sbom.py" "$check" "$out" "$bundle_sha"
+fi
 
 # FAT32 has enough reserve for several overlay generations. Size is adaptive.
 used_kib=$(du -sk "$media" | cut -f1)

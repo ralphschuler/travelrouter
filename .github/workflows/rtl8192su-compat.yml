@@ -1,0 +1,50 @@
+name: RTL8191SU driver compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/rtl8192su-compat.yml'
+      - 'Makefile'
+      - 'image/build.sh'
+      - 'image/build_r92su.sh'
+      - 'image/drivers/rtl8192su/**'
+      - 'image/overlay.py'
+      - 'image/packages.txt'
+      - 'rootfs/etc/init.d/travelrouter-wifi'
+      - 'docs/wifi-support.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-driver:
+    name: Build module against Alpine CM5 kernel headers
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      KERNEL_RELEASE: 6.18.58-0-rpi
+      KERNEL_PACKAGE_VERSION: 6.18.58-r0
+    steps:
+      - name: Check out TravelRouter compatibility patches
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build r92su against Alpine's exact Raspberry Pi kernel headers
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -e KERNEL_RELEASE -e KERNEL_PACKAGE_VERSION \
+            -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+            alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a \
+            sh -eu -c '
+              apk add --no-cache build-base git kmod patch python3
+              make driver \
+                DRIVER_BUILD_DIR="$PWD/build/driver" \
+                DRIVER_OUTPUT="$PWD/build/r92su.ko" \
+                KERNEL_RELEASE="$KERNEL_RELEASE" \
+                KERNEL_PACKAGE_VERSION="$KERNEL_PACKAGE_VERSION"
+            '
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rtl8191su-r92su-aarch64
+          path: build/r92su.ko
+          if-no-files-found: error
+          retention-days: 14

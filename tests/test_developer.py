@@ -102,6 +102,7 @@ class DeveloperTests(unittest.TestCase):
             router.filtering.status.return_value = {'missing_countries': []}
             router.filtering.rules.return_value = ('zones', [])
             router.privacy = Mock(mode='direct')
+            router.network = Mock(wan='wlan1')
             router.ap, router.last_dns_mode, router.last_policy, router.filter_revision = 'wlan0', 'dot', None, 0
 
             def scoped_path(value):
@@ -110,6 +111,11 @@ class DeveloperTests(unittest.TestCase):
             with patch('travelrouter.system.Path', side_effect=scoped_path), \
                  patch('travelrouter.system.atomic_write'), patch('travelrouter.system.command') as run:
                 router.apply('offline', None)
+                router.network.wan = 'wlan2'
+                router.apply('offline', None)
             commands = [call.args[0] for call in run.call_args_list]
             self.assertFalse(any('dnsmasq' in args for args in commands))
-            self.assertTrue(any('nft' in args[0] for args in commands))
+            nft_calls = [call for call in run.call_args_list if 'nft' in call.args[0][0]]
+            self.assertEqual(len(nft_calls), 2)
+            self.assertIn('iifname "wlan1" udp sport 67 udp dport 68 accept', nft_calls[0].kwargs['input_text'])
+            self.assertIn('iifname "wlan2" udp sport 67 udp dport 68 accept', nft_calls[1].kwargs['input_text'])

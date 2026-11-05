@@ -11,6 +11,14 @@ from .config import atomic_write
 from .policy import interface
 from .security import validate_text
 
+WIFI_CONNECT_TIMEOUT = 90
+
+
+class CommandFailure(RuntimeError):
+    def __init__(self, program, returncode):
+        self.returncode = returncode
+        super().__init__(f'{Path(program).name} operation failed')
+
 
 def command(arguments, timeout=20, input_text=None):
     executable = shutil.which(Path(arguments[0]).name, path='/usr/sbin:/usr/bin:/sbin:/bin')
@@ -21,7 +29,7 @@ def command(arguments, timeout=20, input_text=None):
                             timeout=timeout, check=False)  # nosec B603
     if result.returncode:
         # External messages may contain credentials; do not return them to HTTP.
-        raise RuntimeError(f'{Path(arguments[0]).name} operation failed')
+        raise CommandFailure(arguments[0], result.returncode)
     return result.stdout
 
 
@@ -74,7 +82,7 @@ class Network:
         self.profiles = Path('/etc/NetworkManager/system-connections')
 
     def nm(self, *arguments, timeout=20):
-        return command(['/usr/bin/nmcli', '--wait', str(min(timeout, 40)), *arguments],
+        return command(['/usr/bin/nmcli', '--wait', str(min(timeout, 90)), *arguments],
                        timeout=timeout + 5)
 
     def scan(self):
@@ -104,7 +112,7 @@ class Network:
         path, identifier = write_profile(self.profiles, ssid, password, allow_open)
         try:
             self.nm('connection', 'load', str(path))
-            self.nm('connection', 'up', 'uuid', identifier, 'ifname', interface(self.wan), timeout=40)
+            self.nm('connection', 'up', 'uuid', identifier, 'ifname', interface(self.wan), timeout=WIFI_CONNECT_TIMEOUT)
             self.nm('connection', 'modify', 'uuid', identifier, 'connection.autoconnect', 'yes')
         except (RuntimeError, subprocess.TimeoutExpired):
             path.unlink(missing_ok=True)
@@ -136,7 +144,11 @@ class Network:
         if action == 'activate':
             if not self.wan:
                 raise ValueError('No upstream Wi-Fi adapter')
-            self.nm('connection', 'up', 'uuid', identifier, 'ifname', interface(self.wan), timeout=40)
+            wan = interface(self.wan)
+            active = self.nm('-t', '--escape', 'yes', '-f', 'UUID,DEVICE', 'connection', 'show', '--active')
+            if any(parse_nmcli(line) == [identifier, wan] for line in active.splitlines()):
+                return
+            self.nm('connection', 'up', 'uuid', identifier, 'ifname', wan, timeout=WIFI_CONNECT_TIMEOUT)
         elif action == 'forget':
             self.nm('connection', 'delete', 'uuid', identifier)
         elif action == 'priority':

@@ -7,12 +7,19 @@ import tarfile
 from pathlib import Path
 
 
-def build(source, target):
+def build(source, target, driver_module=None):
     source, target = Path(source), Path(target)
     overlay = target / 'overlay'
     shutil.copytree(source / 'rootfs', overlay, dirs_exist_ok=True)
     shutil.copytree(source / 'src' / 'travelrouter', overlay / 'opt/travelrouter/travelrouter',
                     ignore=shutil.ignore_patterns('__pycache__', '*.pyc'), dirs_exist_ok=True)
+    if driver_module is not None:
+        driver_module = Path(driver_module)
+        if not driver_module.is_file() or driver_module.is_symlink():
+            raise RuntimeError('The optional Wi-Fi driver module is missing or unsafe')
+        module_dir = overlay / 'opt/travelrouter/modules'
+        module_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(driver_module, module_dir / 'r92su.ko')
     packages = (source / 'image/packages.txt').read_text()
     (overlay / 'etc/apk').mkdir(parents=True, exist_ok=True)
     (overlay / 'etc/apk/world').write_text(packages)
@@ -25,7 +32,7 @@ def build(source, target):
     services = {
         'sysinit': ['devfs', 'dmesg', 'udev', 'udev-trigger', 'hwdrivers', 'modloop', 'travelrouter-recovery'],
         'boot': ['modules', 'sysctl', 'hostname', 'bootmisc', 'syslog', 'localmount'],
-        'default': ['crond', 'dbus', 'networkmanager', 'hostapd', 'dnsmasq', 'unbound', 'chronyd',
+        'default': ['crond', 'dbus', 'travelrouter-wifi', 'networkmanager', 'hostapd', 'dnsmasq', 'unbound', 'chronyd',
                     'travelrouter-bootstrap', 'travelrouter', 'travelrouter-ssh'],
         'shutdown': ['mount-ro', 'killprocs', 'savecache'],
     }
@@ -50,4 +57,6 @@ def root_owner(info):
 
 
 if __name__ == '__main__':
-    build(sys.argv[1], sys.argv[2])
+    if len(sys.argv) not in (3, 4):
+        raise SystemExit('usage: overlay.py SOURCE_DIR TARGET_DIR [DRIVER_MODULE]')
+    build(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
