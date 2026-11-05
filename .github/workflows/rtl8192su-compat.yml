@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/rtl8192su-compat.yml'
+      - 'image/drivers/rtl8192su/**'
       - 'docs/wifi-support.md'
   workflow_dispatch:
 
