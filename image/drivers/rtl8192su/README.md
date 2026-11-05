@@ -25,5 +25,8 @@ copyright notices when distributing the built module.
 
 The build also compiles and runs a host-side check against the patched transmit
 code. It checks station broadcast and unicast frames and AP broadcast frames for
-the correct wireless receiver and key. Python 3 and a host C compiler are
-required. This check does not replace testing radio traffic on hardware.
+the correct wireless receiver and key. A second check exercises protected
+unicast and group receive frames, including a shared key index and the legacy
+WEP fallback. A third check verifies CCMP replay protection independently per
+QoS traffic identifier and rejects replayed packets. Python 3 and a host C compiler are required. These checks do not
+replace testing radio traffic on hardware.
