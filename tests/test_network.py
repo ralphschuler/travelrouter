@@ -39,5 +39,26 @@ class NetworkTests(unittest.TestCase):
             self.assertEqual(len(activations), 2)
             for call in activations:
                 wait = int(call.args[0][2])
-                self.assertGreaterEqual(wait, 60)
+                self.assertGreaterEqual(wait, 90)
                 self.assertGreater(call.kwargs['timeout'], wait)
+
+    def test_using_already_active_saved_network_does_not_reconnect(self):
+        with tempfile.TemporaryDirectory() as directory:
+            network = Network('wlan1')
+            network.profiles = Path(directory)
+            identifier = '12345678-1234-1234-1234-123456789abc'
+            (network.profiles / f'travelrouter-{identifier}.nmconnection').touch()
+            with patch.object(network, 'nm', return_value=f'{identifier}:wlan1\n') as nm:
+                network.saved_action('activate', identifier)
+            nm.assert_called_once_with('-t', '--escape', 'yes', '-f', 'UUID,DEVICE', 'connection', 'show', '--active')
+
+    def test_using_inactive_saved_network_requests_activation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            network = Network('wlan1')
+            network.profiles = Path(directory)
+            identifier = '12345678-1234-1234-1234-123456789abc'
+            (network.profiles / f'travelrouter-{identifier}.nmconnection').touch()
+            with patch.object(network, 'nm', return_value='') as nm:
+                network.saved_action('activate', identifier)
+            self.assertEqual(nm.call_count, 2)
+            self.assertEqual(nm.call_args.args[:4], ('connection', 'up', 'uuid', identifier))

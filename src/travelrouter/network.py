@@ -11,7 +11,7 @@ from .config import atomic_write
 from .policy import interface
 from .security import validate_text
 
-WIFI_CONNECT_TIMEOUT = 75
+WIFI_CONNECT_TIMEOUT = 90
 
 
 def command(arguments, timeout=20, input_text=None):
@@ -138,7 +138,11 @@ class Network:
         if action == 'activate':
             if not self.wan:
                 raise ValueError('No upstream Wi-Fi adapter')
-            self.nm('connection', 'up', 'uuid', identifier, 'ifname', interface(self.wan), timeout=WIFI_CONNECT_TIMEOUT)
+            wan = interface(self.wan)
+            active = self.nm('-t', '--escape', 'yes', '-f', 'UUID,DEVICE', 'connection', 'show', '--active')
+            if any(parse_nmcli(line) == [identifier, wan] for line in active.splitlines()):
+                return
+            self.nm('connection', 'up', 'uuid', identifier, 'ifname', wan, timeout=WIFI_CONNECT_TIMEOUT)
         elif action == 'forget':
             self.nm('connection', 'delete', 'uuid', identifier)
         elif action == 'priority':
