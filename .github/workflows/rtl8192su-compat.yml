@@ -19,6 +19,8 @@ jobs:
       DRIVER_REVISION: 1f09c7a6eceffc92e63ddc636c174e8f3770eeb9
       KERNEL_VERSION: 6.18.58
     steps:
+      - name: Check out TravelRouter compatibility patches
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install kernel build dependencies
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y bc bison build-essential flex libelf-dev libssl-dev
       - name: Download and verify Linux source
