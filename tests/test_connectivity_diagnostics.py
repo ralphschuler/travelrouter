@@ -30,3 +30,19 @@ class ConnectivityDiagnosticTests(unittest.TestCase):
             with self.assertLogs('travelrouter.system', level='INFO') as logs:
                 self.assertEqual(router._probe('wlan1'), 'offline')
         self.assertIn('HTTP check failed (curl exit 6)', logs.output[0])
+
+    def test_http_probe_timeout_uses_independent_verified_https_fallback(self):
+        router = System.__new__(System)
+        with patch('travelrouter.system.command', side_effect=[CommandFailure('/usr/bin/curl', 28), '200']):
+            self.assertEqual(router._probe('wlan1'), 'online')
+
+    def test_http_probe_timeout_does_not_trust_unexpected_fallback_status(self):
+        router = System.__new__(System)
+        with patch('travelrouter.system.command', side_effect=[CommandFailure('/usr/bin/curl', 28), '302']):
+            self.assertEqual(router._probe('wlan1'), 'offline')
+
+    def test_captive_response_is_not_bypassed_by_fallback(self):
+        router = System.__new__(System)
+        with patch('travelrouter.system.command', return_value='login\n302') as run:
+            self.assertEqual(router._probe('wlan1'), 'captive')
+            self.assertEqual(run.call_count, 1)

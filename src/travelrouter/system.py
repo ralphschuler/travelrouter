@@ -401,6 +401,18 @@ class System:
             body, code = response.rsplit('\n', 1)
             status = int(code)
         except (RuntimeError, subprocess.TimeoutExpired, ValueError) as error:
+            # A single probe host can time out even when the link works. A
+            # second, certificate-verified endpoint can establish connectivity
+            # without mistaking a captive redirect for Internet access.
+            try:
+                fallback = command(['/usr/bin/curl', '-4', '--silent', '--show-error', '--noproxy', '*',
+                                    '--interface', wan, '--max-time', '5', '--proto', '=https',
+                                    '--head', '--output', '/dev/null', '--write-out', '%{http_code}',
+                                    'https://example.com/'], timeout=7)
+                if fallback.strip() == '200':
+                    return self._probe_result('online', 'independent HTTPS fallback passed')
+            except (RuntimeError, subprocess.TimeoutExpired):
+                pass
             return self._probe_result('offline', self._probe_failure('HTTP', error))
         tls_ok = False
         if status == 200 and body.strip() == 'NetworkManager is online':
