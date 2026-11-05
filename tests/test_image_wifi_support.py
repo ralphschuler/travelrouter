@@ -46,8 +46,9 @@ class WirelessSupportTests(unittest.TestCase):
 
         config = '\n'.join(f'{option}=m' for option in support.REQUIRED_USB_WIFI_MODULES)
         config += '\nCONFIG_BRCMFMAC=m\nCONFIG_BRCMFMAC_USB=y\n'
-        modloop = '\n'.join(f'./lib/modules/kernel/{module}.ko.xz'
-                            for module in support.REQUIRED_USB_WIFI_MODULES.values())
+        modloop = '\n'.join(
+            f'./lib/modules/kernel/{module.replace("at76c50x_usb", "at76c50x-usb")}.ko.xz'
+            for module in support.REQUIRED_USB_WIFI_MODULES.values())
         modloop += '\n./lib/modules/kernel/brcmfmac.ko.xz\n'
         support.validate_kernel_wifi_support(config, modloop)
 

@@ -19,7 +19,10 @@ curl --fail --location --retry 3 "$base/$branch/releases/aarch64/$bundle" -o "$b
 printf '%s  %s\n' "$bundle_sha" "$build_dir/$bundle" | sha256sum -c -
 tar -xzf "$build_dir/$bundle" -C "$media"
 set -- "$media"/boot/config-*-rpi
-[ "$#" -eq 1 ] && [ -f "$1" ] || { echo 'Missing or ambiguous Raspberry Pi kernel config'; exit 1; }
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+    echo 'Missing or ambiguous Raspberry Pi kernel config'
+    exit 1
+fi
 [ -f "$media/boot/modloop-rpi" ] || { echo 'Missing Raspberry Pi kernel module loop'; exit 1; }
 python3 "$source_dir/image/wifi_support.py" "$1" "$media/boot/modloop-rpi"
 python3 "$source_dir/image/initramfs_recovery.py" "$media/boot/initramfs-rpi" \

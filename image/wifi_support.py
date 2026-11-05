@@ -12,7 +12,7 @@ REQUIRED_USB_WIFI_MODULES = {
     'CONFIG_ATH9K_HTC': 'ath9k_htc',
     'CONFIG_AR5523': 'ar5523',
     'CONFIG_CARL9170': 'carl9170',
-    'CONFIG_LIBERTAS_USB': 'libertas_usb',
+    'CONFIG_LIBERTAS_USB': 'usb8xxx',
     'CONFIG_LIBERTAS_THINFIRM_USB': 'libertas_tf_usb',
     'CONFIG_MT7601U': 'mt7601u',
     'CONFIG_MT76x0U': 'mt76x0u',
@@ -50,7 +50,7 @@ def _module_names(listing):
         filename = Path(line.split()[-1]).name if line.split() else ''
         match = re.fullmatch(r'(.+)\.ko(?:\.(?:gz|xz|zst))?', filename)
         if match:
-            names.add(match.group(1))
+            names.add(match.group(1).replace('-', '_'))
     return names
 
 

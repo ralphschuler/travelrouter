@@ -36,6 +36,8 @@ jobs:
           git clone --filter=blob:none https://github.com/chunkeey/rtl8192su.git build/rtl8192su
           git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
           test "$(git -C build/rtl8192su rev-parse HEAD)" = "$DRIVER_REVISION"
+      - name: Apply maintained Linux API compatibility patch
+        run: patch --directory=build/rtl8192su/r92su -p1 < image/drivers/rtl8192su/0001-linux-unaligned-header.patch
       - name: Prepare Linux 6.18.58 headers
         run: |
           kernel="$GITHUB_WORKSPACE/build/linux-${KERNEL_VERSION}"

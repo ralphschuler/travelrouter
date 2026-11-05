@@ -16,7 +16,7 @@ image build.
 | Atheros AR9170 | `carl9170` |
 | Atmel AT76C50x | `at76c50x_usb` |
 | Broadcom FullMAC USB | `brcmfmac` |
-| Marvell Libertas | `libertas_usb`, `libertas_tf_usb` |
+| Marvell Libertas | `usb8xxx`, `libertas_tf_usb` |
 | MediaTek | `mt7601u`, `mt76x0u`, `mt76x2u`, `mt7921u`, `mt7925u` |
 | Prism54 | `p54usb` |
 | Ralink | `rt2500usb`, `rt73usb`, `rt2800usb` |
@@ -42,7 +42,8 @@ support for recent `wireless-testing` kernels. It is a candidate to port, not a
 supported driver, so it is not included in the release image.
 
 The `RTL8191SU driver compatibility` GitHub Actions workflow checks whether
-this source compiles against Linux 6.18.58. Passing that build proves only API
+this source compiles against Linux 6.18.58, applying the compatibility patches
+kept under `image/drivers/rtl8192su`. Passing that build proves only API
 compatibility. The adapter still needs real CM5 checks for scanning, encrypted
 upstream connections, unplug/replug and reboot before the driver can ship.
 
