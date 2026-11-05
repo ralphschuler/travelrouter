@@ -34,11 +34,11 @@ jobs:
               kernel_dev="linux-rpi-dev-${KERNEL_PACKAGE_VERSION}.apk"
               wget -q -O "/tmp/${kernel_dev}" \
                 "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/${kernel_dev}"
+              apk verify "/tmp/${kernel_dev}"
               apk add --no-cache "/tmp/${kernel_dev}"
-              test "$(apk info -v linux-rpi-dev)" = "linux-rpi-dev-${KERNEL_PACKAGE_VERSION}"
               kernel_dir="/usr/src/linux-headers-${KERNEL_RELEASE}"
-              test -d "$kernel_dir"
-              test -s "$kernel_dir/Module.symvers"
+              test -d "$kernel_dir" || { echo "Missing expected kernel headers: $kernel_dir"; ls -la /usr/src; exit 1; }
+              test -s "$kernel_dir/Module.symvers" || { echo "Missing Module.symvers in $kernel_dir"; ls -la "$kernel_dir"; exit 1; }
               mkdir -p build
               git clone --filter=blob:none https://github.com/chunkeey/rtl8192su.git build/rtl8192su
               git -C build/rtl8192su checkout --detach "$DRIVER_REVISION"
