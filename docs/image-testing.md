@@ -26,8 +26,9 @@ shipped OpenRC sysinit, boot and default runlevels. Production service files,
 application code and package contents are not replaced with mocks.
 
 When the CM5 build includes the experimental RTL8191SU module, the guest also
-copies it into Alpine's writable `modloop` module overlay, runs `depmod`, loads
-it through `modprobe`, and checks its kernel version, USB ID and firmware name.
+loads its declared dependencies from Alpine's read-only `modloop`, inserts the
+module from the writable application overlay, and checks its kernel version,
+USB ID and firmware name.
 QEMU has no RTL8191SU radio, so this proves module loading only; RF scanning and
 upstream association still require the physical CM5 and adapter.
 

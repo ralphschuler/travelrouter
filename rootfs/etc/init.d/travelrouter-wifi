@@ -17,16 +17,30 @@ start() {
         return 0
     fi
 
-    release=$(uname -r)
-    module_dir="/lib/modules/$release/updates"
-    if [ ! -d "/lib/modules/$release" ]; then
-        ebegin "Kernel module directory for $release is unavailable"
+    ebegin "Loading dependencies for the experimental RTL8191SU module"
+    dependencies=$(modinfo -F depends "$module") || {
         eend 1
         return 1
-    fi
+    }
+    dependencies=$(printf '%s' "$dependencies" | tr ',' ' ')
+    # The modinfo field is a comma-separated list and needs intentional splitting.
+    # shellcheck disable=SC2086
+    for dependency in $dependencies; do
+        modprobe "$dependency" || {
+            eend 1
+            return 1
+        }
+    done
+    eend 0
 
-    ebegin "Registering the experimental RTL8191SU module"
-    mkdir -p "$module_dir" && cp "$module" "$module_dir/r92su.ko" && \
-        depmod -a "$release" && modprobe r92su
-    eend $?
+    if [ ! -d /sys/module/r92su ]; then
+        ebegin "Loading the experimental RTL8191SU module"
+        insmod "$module" || {
+            eend 1
+            return 1
+        }
+        eend 0
+        return 0
+    fi
+    eend 0
 }

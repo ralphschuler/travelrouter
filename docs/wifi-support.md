@@ -42,8 +42,8 @@ against `wireless-testing`.
 The pinned upstream revision is recorded in `image/drivers/rtl8192su/UPSTREAM_REVISION`;
 the numbered compatibility patches and Makefile define how to update it. The
 CM5 development image builds this module against the exact Alpine 6.18.58 kernel
-headers, registers it after `modloop`, and checks that it loads in the QEMU image
-test. Release and development builds include it by default; pass
+headers, loads it and its dependencies after `modloop`, and checks that it loads
+in the QEMU image test. Release and development builds include it by default; pass
 `RTL8191SU=0` to `make image-cm5` to opt out. QEMU verifies module ABI and
 dependency loading, not radio behavior. The module remains marked experimental
 until the CM5 passes physical scan, WPA2 association, traffic, unplug/replug,
